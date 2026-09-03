@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Cmms.Api.Realtime;
 using Cmms.BuildingBlocks.Database;
 using Cmms.Modules.Assets.Infrastructure;
 using Cmms.Modules.Audit.Application;
@@ -141,6 +142,7 @@ internal static class WorkOrdersEndpoints
         WorkManagementDbContext workOrdersDb,
         AssetsDbContext assetsDb,
         IPermissionEvaluator permissions,
+        WorkOrderDispatchBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
         if (!await AntiforgeryHelpers.HasValidAntiforgeryTokenAsync(httpContext, antiforgery))
@@ -202,6 +204,21 @@ internal static class WorkOrdersEndpoints
         workOrdersDb.WorkOrders.Add(workOrder);
         await workOrdersDb.SaveChangesAsync(cancellationToken);
 
+        // Broadcast after the write actually committed — never call out to another service while
+        // holding a lock/transaction (docs/02's concurrency protocol); a plain single-context
+        // SaveChangesAsync above already committed by the time this runs.
+        await broadcaster.WorkOrderChangedAsync(
+            workOrder.SiteId,
+            new WorkOrderChangedPayload(workOrder.Id, workOrder.SiteId, workOrder.Status.ToString(), workOrder.Priority.ToString(), workOrder.AssetId, "created"),
+            cancellationToken);
+        if (workOrder.Priority == WorkOrderPriority.P1)
+        {
+            await broadcaster.HighPriorityAlertAsync(
+                workOrder.SiteId,
+                new HighPriorityAlertPayload(workOrder.Id, workOrder.SiteId, workOrder.Title, workOrder.Priority.ToString(), workOrder.AssetId),
+                cancellationToken);
+        }
+
         return Results.Created($"/work-orders/{workOrder.Id}", WorkOrderResponse.From(workOrder));
     }
 
@@ -212,6 +229,7 @@ internal static class WorkOrdersEndpoints
         IConfiguration configuration,
         IPermissionEvaluator permissions,
         IAuditEventWriter auditWriter,
+        WorkOrderDispatchBroadcaster broadcaster,
         CancellationToken cancellationToken) =>
         TransitionAsync(
             id,
@@ -220,6 +238,7 @@ internal static class WorkOrdersEndpoints
             configuration,
             permissions,
             auditWriter,
+            broadcaster,
             PermissionCatalog.WorkOrdersPlan,
             actorCheck: null,
             action: "workorder.published",
@@ -243,6 +262,7 @@ internal static class WorkOrdersEndpoints
         IConfiguration configuration,
         IPermissionEvaluator permissions,
         IAuditEventWriter auditWriter,
+        WorkOrderDispatchBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
         if (!await AntiforgeryHelpers.HasValidAntiforgeryTokenAsync(httpContext, antiforgery))
@@ -309,6 +329,11 @@ internal static class WorkOrdersEndpoints
 
         await transactionScope.CommitAsync(cancellationToken);
 
+        await broadcaster.WorkOrderChangedAsync(
+            updated.SiteId,
+            new WorkOrderChangedPayload(updated.Id, updated.SiteId, updated.Status.ToString(), updated.Priority.ToString(), updated.AssetId, "selfclaimed"),
+            cancellationToken);
+
         return Results.Ok(WorkOrderResponse.From(updated));
     }
 
@@ -321,6 +346,7 @@ internal static class WorkOrdersEndpoints
         IConfiguration configuration,
         IPermissionEvaluator permissions,
         IAuditEventWriter auditWriter,
+        WorkOrderDispatchBroadcaster broadcaster,
         CancellationToken cancellationToken) =>
         TransitionAsync(
             id,
@@ -329,6 +355,7 @@ internal static class WorkOrdersEndpoints
             configuration,
             permissions,
             auditWriter,
+            broadcaster,
             PermissionCatalog.WorkOrdersExecute,
             actorCheck: RequireAssigneeOrPlannerAsync,
             action: "workorder.started",
@@ -352,6 +379,7 @@ internal static class WorkOrdersEndpoints
         IConfiguration configuration,
         IPermissionEvaluator permissions,
         IAuditEventWriter auditWriter,
+        WorkOrderDispatchBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
         if (!await AntiforgeryHelpers.HasValidAntiforgeryTokenAsync(httpContext, antiforgery))
@@ -425,6 +453,11 @@ internal static class WorkOrdersEndpoints
 
         await transactionScope.CommitAsync(cancellationToken);
 
+        await broadcaster.WorkOrderChangedAsync(
+            workOrder.SiteId,
+            new WorkOrderChangedPayload(workOrder.Id, workOrder.SiteId, workOrder.Status.ToString(), workOrder.Priority.ToString(), workOrder.AssetId, "completed"),
+            cancellationToken);
+
         return Results.Ok(WorkOrderResponse.From(workOrder));
     }
 
@@ -435,6 +468,7 @@ internal static class WorkOrdersEndpoints
         IConfiguration configuration,
         IPermissionEvaluator permissions,
         IAuditEventWriter auditWriter,
+        WorkOrderDispatchBroadcaster broadcaster,
         CancellationToken cancellationToken) =>
         TransitionAsync(
             id,
@@ -443,6 +477,7 @@ internal static class WorkOrdersEndpoints
             configuration,
             permissions,
             auditWriter,
+            broadcaster,
             PermissionCatalog.WorkOrdersClose,
             actorCheck: null,
             action: "workorder.closed",
@@ -458,6 +493,7 @@ internal static class WorkOrdersEndpoints
         IConfiguration configuration,
         IPermissionEvaluator permissions,
         IAuditEventWriter auditWriter,
+        WorkOrderDispatchBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Reason))
@@ -475,6 +511,7 @@ internal static class WorkOrdersEndpoints
             configuration,
             permissions,
             auditWriter,
+            broadcaster,
             PermissionCatalog.WorkOrdersReopen,
             actorCheck: null,
             action: "workorder.reopened",
@@ -491,6 +528,7 @@ internal static class WorkOrdersEndpoints
         IConfiguration configuration,
         IPermissionEvaluator permissions,
         IAuditEventWriter auditWriter,
+        WorkOrderDispatchBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Reason))
@@ -508,6 +546,7 @@ internal static class WorkOrdersEndpoints
             configuration,
             permissions,
             auditWriter,
+            broadcaster,
             PermissionCatalog.WorkOrdersCancel,
             actorCheck: null,
             action: "workorder.cancelled",
@@ -539,6 +578,7 @@ internal static class WorkOrdersEndpoints
         IConfiguration configuration,
         IPermissionEvaluator permissions,
         IAuditEventWriter auditWriter,
+        WorkOrderDispatchBroadcaster broadcaster,
         string permissionCode,
         ActorCheck? actorCheck,
         string action,
@@ -628,6 +668,21 @@ internal static class WorkOrdersEndpoints
             cancellationToken);
 
         await transactionScope.CommitAsync(cancellationToken);
+
+        await broadcaster.WorkOrderChangedAsync(
+            workOrder.SiteId,
+            new WorkOrderChangedPayload(workOrder.Id, workOrder.SiteId, workOrder.Status.ToString(), workOrder.Priority.ToString(), workOrder.AssetId, action),
+            cancellationToken);
+        if (action == "workorder.published" && workOrder.Priority == WorkOrderPriority.P1)
+        {
+            // "Published" is the moment a P1 order first becomes claimable — that's the actionable
+            // emergency moment (ADR-17: "emergency high-priority alerts"), not mere creation of a
+            // still-Draft order nobody can act on yet.
+            await broadcaster.HighPriorityAlertAsync(
+                workOrder.SiteId,
+                new HighPriorityAlertPayload(workOrder.Id, workOrder.SiteId, workOrder.Title, workOrder.Priority.ToString(), workOrder.AssetId),
+                cancellationToken);
+        }
 
         return Results.Ok(WorkOrderResponse.From(workOrder));
     }

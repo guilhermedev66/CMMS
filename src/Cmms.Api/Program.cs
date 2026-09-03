@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Cmms.Api;
+using Cmms.Api.Realtime;
 using Cmms.Modules.Assets;
 using Cmms.Modules.Assets.Infrastructure;
 using Cmms.Modules.Attachments;
@@ -38,6 +39,9 @@ if (builder.Configuration.GetValue("PreventiveMaintenance:SchedulerEnabled", tru
 }
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+// ADR-17: SignalR bounded to the M5 dispatch board only.
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<WorkOrderDispatchBroadcaster>();
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-CSRF-TOKEN";
@@ -89,6 +93,8 @@ app.MapWorkOrdersEndpoints();
 app.MapWorkOrderExecutionEndpoints();
 app.MapAttachmentsEndpoints();
 app.MapMaintenancePlansEndpoints();
+app.MapReportingEndpoints();
+app.MapHub<WorkOrderDispatchHub>("/hubs/work-orders");
 
 app.MapGet("/health", async (
     IdentityAccessDbContext identityAccess,

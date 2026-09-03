@@ -34,5 +34,10 @@ export function renderWithProviders(ui: ReactElement, { route = '/', auth }: Ren
 
 export const authenticatedFixture: Partial<AuthContextValue> = {
   status: 'authenticated',
-  user: { id: 'user-1', email: 'admin@cmms.local' },
+  user: {
+    id: 'user-1',
+    email: 'admin@cmms.local',
+    isAdmin: false,
+    siteMemberships: [{ siteId: 'site-1', siteName: 'Test Site', role: 'Planner' }],
+  },
 }

@@ -18,12 +18,13 @@ describe('AppShell (via App routing)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders the sidebar, top bar, and the Dashboard placeholder on the index route', () => {
+  it('renders the sidebar, top bar, and the real Dashboard page on the index route', () => {
     renderWithProviders(<App />, { auth: authenticatedFixture })
 
     expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/search assets, work orders/i)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
+    // The fixture user is a Planner, so DashboardPage renders the Planner/Admin view (M5).
+    expect(screen.getByRole('heading', { name: 'Operations Dashboard' })).toBeInTheDocument()
   })
 
   it('navigating to a nav item swaps the routed content while the shell stays mounted', async () => {
@@ -33,7 +34,7 @@ describe('AppShell (via App routing)', () => {
     await user.click(screen.getByRole('link', { name: /assets/i }))
 
     expect(screen.getByRole('heading', { name: 'Assets' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Dashboard' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Operations Dashboard' })).not.toBeInTheDocument()
     // Shell chrome persists across the route change.
     expect(screen.getByRole('link', { name: /work orders/i })).toBeInTheDocument()
   })

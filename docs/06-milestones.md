@@ -433,15 +433,122 @@ real-device/browser mobile visual pass (carried over, same as M1–M3); a CI
 step that actually builds the Docker image (new item, tracked for M6);
 public "report an issue" QR stretch feature (optional, out of scope).
 
-## M5 — Reporting & Operations
+## M5 — Reporting & Operations — **PASS**
 
 MTBF, MTTR, availability, downtime, backlog, cost, preventive-vs-corrective
-reporting, operational dashboard, SignalR for live updates (if approved in
-M0).
+reporting, operational dashboard, SignalR for live updates (ADR-17 already
+committed this project to SignalR, bounded to the dispatch board — not an
+optional item by the time M5 started).
 
-DoD: every KPI formula is documented and matches its cited industry
-definition; dashboard numbers reconcile against raw work-order/downtime data
-in a test; Codex QA pass with no BLOCKER.
+DoD check: every KPI formula is documented and matches its cited industry
+definition — PASS: every metric in `src/Cmms.Api/ReportingEndpoints.cs` is
+commented with its exact source line from docs/01's "KPI formulas" section
+(itself sourced from SMRP/ISO 14224/EN 13306) and, where this schema's
+actual data doesn't carry a field the textbook formula wants, the
+approximation or omission is named at the point it's made — never silently
+substituted. Dashboard numbers reconcile against raw work-order/downtime
+data in a test — PASS:
+`ReportingTests.Dashboard_reconciles_preventive_corrective_split_and_parts_cost_against_raw_rows`
+independently re-derives parts cost from the raw `part_usages` table via a
+query path the endpoint itself doesn't share, and asserts the endpoint's
+response matches exactly (verified in CI, real PostgreSQL). Independent QA
+pass — unavailable this session (fallback protocol, same as M1–M4): the
+orchestrator's adversarial self-review before commit caught a real
+information-disclosure gap (see "Backend" below) and fixed it before this
+milestone's commit landed, not after; independent re-review is still
+tracked as pending, carried forward with M2–M4's.
+
+Design:
+- **KPI scope, named explicitly rather than silently approximated**:
+  MTBF/MTTR/MDT/Inherent Availability are reported **only when an
+  `assetId` is supplied** — these are inherently per-equipment metrics
+  (docs/01 cites MTBF as operating time "between failures" for *an* asset),
+  and averaging them across a site's whole heterogeneous asset mix without
+  a weighting model this system doesn't have would not be mathematically
+  defensible, so the API returns `null` rather than a misleading
+  site-wide blend. Every metric is `null` — never `0` or `Infinity` — when
+  its underlying population is empty (proven by
+  `Mtbf_and_related_figures_are_null_not_zero_when_the_asset_has_zero_failures_in_the_window`
+  and `..._when_no_asset_is_specified_never_averaged_across_assets`).
+  Planned Maintenance % uses each completed Work Order's wrench-time span
+  (`wrench_start_at_utc -> completed_at_utc`) as the labor-hours proxy the
+  formula calls for — this schema has no per-entry labor ledger, the same
+  already-documented M4 scope cut, not a new deviation. Backlog is reported
+  as a live open-order count, explicitly **not** the textbook crew-weeks
+  figure (`Σ Estimated Labor Hours / Available Craft Hours`) — that needs a
+  staffing/crew table this system was never built with; reporting a raw
+  count instead of a fabricated crew-weeks number is the honest choice,
+  named inline rather than approximated silently. `%RAV` was not built at
+  all — docs/01 itself scopes it as "reportable only once asset
+  replacement-value fields exist," which they don't.
+- **SignalR dispatch board (ADR-17)**: `WorkOrderDispatchHub` derives group
+  membership (`site:{siteId}`, one per active site membership, or every
+  site for company-wide Admin) entirely from the connection's authenticated
+  identity at connect time — there is no client-supplied site/group
+  parameter anywhere in the hub. Proven, not just asserted, by
+  `DispatchHubTests.A_work_order_broadcast_for_site_a_never_reaches_a_connection_scoped_to_site_b`:
+  two real SignalR connections (real cookie auth, long-polling transport
+  over `TestServer`) driven concurrently, asserting a Site A broadcast
+  reaches the Site A connection and never reaches the Site B one. The group
+  is intentionally **site-wide across every role** (a shared "board," not a
+  per-technician-assignment filter) — a deliberate reading of ADR-17's
+  "dispatch board" framing, named explicitly here rather than left
+  ambiguous. **Self-review caught and fixed before commit**: the first cut
+  broadcast a `WorkOrderChanged` event at plain Work Order *creation*
+  (still `Draft`), which — combined with that site-wide group — leaked the
+  existence, priority, and asset-targeting of unpublished Planner-only
+  planning activity to every Technician on the site, strictly broader than
+  `workorders.read.assigned` would ever show them via the ordinary REST
+  API. Fixed by removing the create-time broadcast entirely; `Publish` (the
+  point an order actually becomes visible/actionable) is the real "this
+  exists now" signal, high-priority (P1) alert included.
+
+Progress:
+- Backend: `ReportingEndpoints.cs` (`GET /reports/kpis`, gated behind
+  `workorders.read.all` — reused, not a new permission, since site-wide
+  Work Order visibility is exactly the predicate a reporting view needs;
+  cost figures additionally masked per `costs.view`, same field-masking
+  pattern as M4's part-usage costs). `src/Cmms.Api/Realtime/
+  WorkOrderDispatchHub.cs` + `WorkOrderDispatchBroadcaster`, wired into
+  `Program.cs` (`AddSignalR()`, `MapHub<WorkOrderDispatchHub>
+  ("/hubs/work-orders")`) and into every Work Order transition endpoint
+  that actually changes visible state (self-claim, publish, start,
+  complete, close, reopen, cancel) — broadcasts fire strictly after each
+  transaction commits, never from inside one (docs/02's "never call
+  storage/email/other network services while holding a lock").
+- Frontend: role-aware per docs/04's IA ("Dashboard — role-aware... not a
+  wall of decorative chart widgets. Technician view: assigned to me today,
+  nothing else"). A Technician's `/` shows only their own claimed/started
+  Work Orders; Planner/Admin get a KPI ribbon (preventive/corrective split,
+  planned-maintenance %, parts cost, backlog, overdue-preventive) + an
+  "attention needed" list (P1 open orders, overdue preventive plans) + a
+  live SignalR activity feed with high-priority alerts visually
+  distinguished (a dismissible danger-toned banner) from ordinary status
+  changes. A separate `/reports` page is table-first with CSV export (per
+  docs/04: "B2B ops tools get their reports exported to spreadsheets far
+  more than admired as visualizations"), listing every KPI with an inline
+  note explaining *why* whenever a value is "—" rather than a number. Both
+  pages share one site/date-range/asset filter bar and a
+  `useWorkOrderDispatch` hook wrapping the `@microsoft/signalr` connection
+  lifecycle. No new dependency beyond `@microsoft/signalr` itself (the
+  official client package).
+- Verified: `dotnet build` (Debug and Release) 0 warnings/0 errors.
+  43 backend tests green in CI (real PostgreSQL + real Docker-hosted
+  runner for the SignalR transport), including all 7 new M5 tests (6
+  reporting, 1 dispatch-hub isolation) — a first push caught one bug in the
+  *test's own* hardcoded sanity-check arithmetic (not the endpoint: the
+  reconciliation assertion against the independently-recomputed value had
+  already passed), fixed and reverified green in a follow-up push, same
+  transparency standard as every other fix disclosed in this document.
+  Frontend `lint`/`build`/`test` green, run and independently re-verified
+  by the orchestrator.
+- **Not verified locally**: same Docker-daemon-unavailable-non-interactively
+  gap as M4 — all Testcontainers/SignalR-over-TestServer tests were
+  verified in CI, not on this machine.
+
+Pending: independent Codex QA re-review (carried over); real-device/browser
+mobile visual pass (carried over); Docker image CI build step (carried over
+from M4, tracked for M6).
 
 ## M6 — Production Readiness
 

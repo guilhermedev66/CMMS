@@ -20,6 +20,13 @@ lean parts/costs (no dedicated inventory role needed) and read-only audit
 access is a permission grant, not a fifth role. Revisit only if a real
 need for finer-grained management roles appears once M2 is in flight.
 
+Admin is company-wide by definition — it is the one role not bound by site
+membership, which is why "Yes" for Admin means all sites throughout the
+table below (equivalent to the explicit "All sites" written on the Requests
+row). Every other role's "Yes"/"Scoped to site" is always evaluated against
+the acting user's actual site memberships — there is no implicit
+company-wide grant for Planner/Technician/Requester.
+
 | Capability | Admin | Planner | Technician | Requester |
 |---|---:|---:|---:|---:|
 | Manage users, roles, sites, settings | Yes | No | No | No |
@@ -129,7 +136,7 @@ short; never call storage/email/other network services while holding a lock
 | A preventive job fires twice | Unique `(plan_id, scheduled_for)` occurrence + atomic generation transaction | Exactly one occurrence and one Work Order, regardless of scheduler timing |
 | Two scheduler ticks/instances (including a redeploy restarting the worker mid-run) | `FOR UPDATE SKIP LOCKED` claim of due plans + the uniqueness constraint above as the real safety net | Work is split across claimers; a crash/retry cannot duplicate output |
 | Retry after an ambiguous Work Order creation (client got no response) | Source-request uniqueness, or a scoped idempotency record for direct creation | Same request returns the prior result; a different payload under the same key is rejected |
-| Concurrent part usage postings | Work Order editability check + conditional stock/ledger write, immutable ledger rows | No lost update, no duplicate posting |
+| Concurrent part usage postings | Work Order editability check, then an immutable insert into the part-usage ledger (no stock row to lock — v1 is record-only, no stock levels); a client-supplied idempotency key deduplicates a retried insert | No duplicate posting; correct total from summing ledger rows, not a mutable counter |
 
 The claim example, concretely — this is the invariant the brief calls out
 explicitly ("duas pessoas tentando assumir a mesma OS"):

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://REPLACE-WITH-RENDER-API-URL.onrender.com/:path*"
+    },
+    {
+      "source": "/hubs/:path*",
+      "destination": "https://REPLACE-WITH-RENDER-API-URL.onrender.com/hubs/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

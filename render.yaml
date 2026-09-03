@@ -1,0 +1,47 @@
+# Render Blueprint (ADR-18: backend -> Render). Deploy with "New +" -> "Blueprint" in the Render
+# dashboard, pointing at this repo — Render reads this file and provisions the service below.
+#
+# Database: this blueprint does NOT provision a Render Postgres instance. ADR-18 specifies Neon
+# PostgreSQL (generous serverless free tier, no card required to start) as the database, provisioned
+# separately in Neon's own dashboard; paste its connection string into CMMS_CONNECTION_STRING below
+# (as a Render secret, not committed here).
+#
+# Attachments (known limitation, disclosed rather than silently shipped): LocalDiskAttachmentStorage
+# (src/Modules/Attachments/Infrastructure/LocalDiskAttachmentStorage.cs) writes to local disk — see
+# AttachmentUploadIntent's doc comment for the full "substitutes a presigned R2 PUT" rationale. On
+# Render's free tier (no persistent disk, which requires a paid plan), that local disk is ephemeral:
+# uploaded evidence photos do not survive a redeploy or a restart. Fine for a portfolio demo's live
+# walkthrough; swapping IAttachmentStorage for a real Cloudflare R2-backed implementation (ADR-3's
+# documented plan) is the fix before this would be a real production deployment — tracked, not
+# silently accepted as done.
+services:
+  - type: web
+    name: cmms-api
+    runtime: docker
+    dockerfilePath: ./src/Cmms.Api/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_HTTP_PORTS
+        value: "8080"
+      - key: ConnectionStrings__Cmms
+        sync: false # set manually in the Render dashboard — the Neon connection string
+      - key: Database__ApplyMigrations
+        value: "true"
+      - key: Authentication__RequireSecureCookies
+        value: "true"
+      - key: BootstrapAdmin__Email
+        sync: false
+      - key: BootstrapAdmin__Password
+        sync: false
+      - key: BootstrapAdmin__DisplayName
+        value: CMMS Administrator
+      - key: PreventiveMaintenance__SchedulerEnabled
+        value: "true"
+      - key: Otel__ConsoleExporterEnabled
+        value: "true" # Render's log stream captures stdout — no separate collector required to see traces
+      - key: Otel__OtlpEndpoint
+        sync: false # optional — set only if pointing at a real collector (Grafana Cloud, Honeycomb, ...)

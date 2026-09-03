@@ -145,7 +145,7 @@ public sealed class ReportingTests : IAsyncLifetime
         Assert.Equal(1, kpis.GetProperty("correctiveWorkOrderCount").GetInt32());
         Assert.False(kpis.GetProperty("costsMasked").GetBoolean());
         Assert.Equal(expectedPartsCost, kpis.GetProperty("totalPartsCost").GetDecimal());
-        Assert.Equal(97.5m, expectedPartsCost); // 3*12.5 + 1*40 — sanity-checks the independent query itself.
+        Assert.Equal(77.5m, expectedPartsCost); // 3*12.5 + 1*40 = 77.5 — sanity-checks the independent query itself.
     }
 
     [Fact]

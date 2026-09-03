@@ -225,6 +225,23 @@ internal static class AssetsEndpoints
             }
         }
 
+        // Codex QA (M1 smoke pass): this check was missing, so a cross-site ParentAssetId fell
+        // through to the DB's composite FK constraint (fk_assets_assets_site_id_parent_asset_id)
+        // as an unhandled DbUpdateException instead of a clean validation error — same fix pattern
+        // as CurrentLocationId above, which already did this correctly.
+        if (request.ParentAssetId is not null)
+        {
+            var parentInSameSite = await assetsDb.Assets
+                .AnyAsync(parent => parent.Id == request.ParentAssetId && parent.SiteId == request.SiteId, cancellationToken);
+            if (!parentInSameSite)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["parentAssetId"] = ["Parent asset must belong to the same site."]
+                });
+            }
+        }
+
         var asset = new Asset(
             request.SiteId,
             request.Tag,

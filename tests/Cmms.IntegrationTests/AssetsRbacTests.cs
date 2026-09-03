@@ -159,4 +159,39 @@ public sealed class AssetsRbacTests : IAsyncLifetime
         // ...and never Site A's, even though it exists and the endpoint call itself succeeds.
         Assert.All(rows, element => Assert.NotEqual(_siteAId, element.GetProperty("siteId").GetGuid()));
     }
+
+    /// <summary>
+    /// Regression test for a Codex QA M1 smoke-pass BLOCKER: CreateAssetAsync validated
+    /// CurrentLocationId's site but not ParentAssetId's, so a cross-site parent reference fell
+    /// through to the DB's composite FK constraint as an unhandled 500 instead of a clean 400.
+    /// </summary>
+    [Fact]
+    public async Task Create_asset_rejects_a_parent_asset_from_a_different_site()
+    {
+        using var plannerClient = _factory.CreateClient();
+        await plannerClient.LoginAsync(_plannerAEmail, Password);
+
+        // A real asset that exists, is a valid parent shape, but belongs to Site B.
+        Guid siteBAssetId;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var assetsDb = scope.ServiceProvider.GetRequiredService<AssetsDbContext>();
+            var siteBAsset = new Asset(_siteBId, $"MOTOR-{Guid.NewGuid():N}"[..12], "Drive Motor", "Rotating Equipment", AssetCriticality.B);
+            assetsDb.Assets.Add(siteBAsset);
+            await assetsDb.SaveChangesAsync();
+            siteBAssetId = siteBAsset.Id;
+        }
+
+        var response = await plannerClient.PostJsonWithCsrfAsync("/assets", new
+        {
+            siteId = _siteAId,
+            tag = $"SKID-{Guid.NewGuid():N}"[..12],
+            name = "Pump Skid",
+            category = "Rotating Equipment",
+            criticality = "B",
+            parentAssetId = siteBAssetId
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

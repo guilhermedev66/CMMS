@@ -61,4 +61,40 @@ public sealed class Asset
     public DateTimeOffset CreatedAtUtc { get; private set; }
 
     public long RowVersion { get; private set; }
+
+    /// <summary>
+    /// Ordinary field edit (assets.edit). Deliberately excludes SiteId (frozen at creation, per
+    /// docs/01-domain-and-workflows.md § Site-boundness) and Criticality (separately audited via
+    /// <see cref="ChangeCriticality"/>, per docs/02-security-and-invariants.md's atomic
+    /// permission table: assets.edit and assets.criticality.change are distinct operations).
+    /// </summary>
+    public void UpdateDetails(
+        string name,
+        string category,
+        string? manufacturer,
+        string? model,
+        string? serialNumber,
+        AssetStatus status,
+        Guid? currentLocationId)
+    {
+        Name = name.Trim();
+        Category = category.Trim();
+        Manufacturer = string.IsNullOrWhiteSpace(manufacturer) ? null : manufacturer.Trim();
+        Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber.Trim();
+        Status = status;
+        CurrentLocationId = currentLocationId;
+    }
+
+    /// <summary>
+    /// Criticality changes are audited separately from ordinary edits (assets.criticality.change,
+    /// per docs/02-security-and-invariants.md). Returns the prior value so the caller can write a
+    /// selective before/after audit payload without re-deriving it.
+    /// </summary>
+    public AssetCriticality ChangeCriticality(AssetCriticality newCriticality)
+    {
+        var previous = Criticality;
+        Criticality = newCriticality;
+        return previous;
+    }
 }

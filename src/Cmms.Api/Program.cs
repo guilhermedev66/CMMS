@@ -1,6 +1,9 @@
+using System.Text.Json.Serialization;
 using Cmms.Api;
 using Cmms.Modules.Assets;
 using Cmms.Modules.Assets.Infrastructure;
+using Cmms.Modules.Audit;
+using Cmms.Modules.Audit.Infrastructure;
 using Cmms.Modules.IdentityAccess;
 using Cmms.Modules.IdentityAccess.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +18,9 @@ var antiforgeryCookieName = secureCookiePolicy == CookieSecurePolicy.Always
 
 builder.Services.AddIdentityAccess(builder.Configuration);
 builder.Services.AddAssets(builder.Configuration);
+builder.Services.AddAudit(builder.Configuration);
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-CSRF-TOKEN";
@@ -36,6 +42,9 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrations"))
     await scope.ServiceProvider
         .GetRequiredService<AssetsDbContext>()
         .Database.MigrateAsync();
+    await scope.ServiceProvider
+        .GetRequiredService<AuditDbContext>()
+        .Database.MigrateAsync();
 }
 
 await IdentityAccessInitializer.BootstrapAdminAsync(app.Services, builder.Configuration);
@@ -45,17 +54,20 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapAuthEndpoints();
+app.MapAssetsEndpoints();
 
 app.MapGet("/health", async (
     IdentityAccessDbContext identityAccess,
     AssetsDbContext assets,
+    AuditDbContext audit,
     CancellationToken cancellationToken) =>
 {
     try
     {
         var databaseAvailable =
             await identityAccess.Database.CanConnectAsync(cancellationToken) &&
-            await assets.Database.CanConnectAsync(cancellationToken);
+            await assets.Database.CanConnectAsync(cancellationToken) &&
+            await audit.Database.CanConnectAsync(cancellationToken);
 
         return databaseAvailable
             ? Results.Ok(new { status = "healthy" })

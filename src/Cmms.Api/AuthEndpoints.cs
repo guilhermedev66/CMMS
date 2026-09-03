@@ -31,7 +31,7 @@ internal static class AuthEndpoints
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager)
     {
-        if (!await HasValidAntiforgeryTokenAsync(context, antiforgery))
+        if (!await AntiforgeryHelpers.HasValidAntiforgeryTokenAsync(context, antiforgery))
         {
             return Results.BadRequest(new { error = "Invalid anti-forgery token." });
         }
@@ -65,7 +65,7 @@ internal static class AuthEndpoints
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager)
     {
-        if (!await HasValidAntiforgeryTokenAsync(context, antiforgery))
+        if (!await AntiforgeryHelpers.HasValidAntiforgeryTokenAsync(context, antiforgery))
         {
             return Results.BadRequest(new { error = "Invalid anti-forgery token." });
         }
@@ -86,21 +86,6 @@ internal static class AuthEndpoints
             id = principal.FindFirstValue(ClaimTypes.NameIdentifier),
             email = principal.FindFirstValue(ClaimTypes.Email) ?? principal.Identity?.Name
         });
-
-    private static async Task<bool> HasValidAntiforgeryTokenAsync(
-        HttpContext context,
-        IAntiforgery antiforgery)
-    {
-        try
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            return true;
-        }
-        catch (AntiforgeryValidationException)
-        {
-            return false;
-        }
-    }
 
     private sealed record LoginRequest(string Email, string Password);
 }

@@ -1,4 +1,5 @@
 using Cmms.BuildingBlocks.Database;
+using Cmms.Modules.IdentityAccess.Application;
 using Cmms.Modules.IdentityAccess.Domain;
 using Cmms.Modules.IdentityAccess.Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -83,6 +84,8 @@ public static class IdentityAccessModule
             options.ValidationInterval = TimeSpan.Zero);
 
         services.AddAuthorization();
+
+        services.AddScoped<IPermissionEvaluator, PermissionEvaluator>();
 
         return services;
     }

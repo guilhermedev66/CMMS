@@ -4,4 +4,5 @@ public static class DatabaseSchemas
 {
     public const string IdentityAccess = "identity_access";
     public const string Assets = "assets";
+    public const string Audit = "audit";
 }

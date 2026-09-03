@@ -4,6 +4,7 @@
     <ProjectReference Include="..\Cmms.BuildingBlocks\Cmms.BuildingBlocks.csproj" />
     <ProjectReference Include="..\Modules\IdentityAccess\IdentityAccess.csproj" />
     <ProjectReference Include="..\Modules\Assets\Assets.csproj" />
+    <ProjectReference Include="..\Modules\Audit\Audit.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

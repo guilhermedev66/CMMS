@@ -1,12 +1,25 @@
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
-import { renderWithProviders } from '../test/renderWithProviders'
+import { authenticatedFixture, renderWithProviders } from '../test/renderWithProviders'
 
 describe('AppShell (via App routing)', () => {
+  beforeEach(() => {
+    // AssetsListPage fetches on mount; these tests exercise shell/routing
+    // mechanics, not that data, so stub it to an empty-but-successful response.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } })),
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('renders the sidebar, top bar, and the Dashboard placeholder on the index route', () => {
-    renderWithProviders(<App />)
+    renderWithProviders(<App />, { auth: authenticatedFixture })
 
     expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/search assets, work orders/i)).toBeInTheDocument()
@@ -15,7 +28,7 @@ describe('AppShell (via App routing)', () => {
 
   it('navigating to a nav item swaps the routed content while the shell stays mounted', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<App />)
+    renderWithProviders(<App />, { auth: authenticatedFixture })
 
     await user.click(screen.getByRole('link', { name: /assets/i }))
 
@@ -27,7 +40,7 @@ describe('AppShell (via App routing)', () => {
 
   it('collapsing the sidebar from within the full shell still hides labels but keeps routing usable', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<App />)
+    renderWithProviders(<App />, { auth: authenticatedFixture })
 
     await user.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
     expect(screen.queryByText('Assets')).not.toBeInTheDocument()
@@ -39,5 +52,12 @@ describe('AppShell (via App routing)', () => {
 
     await user.click(assetsLink!)
     expect(screen.getByRole('heading', { name: 'Assets' })).toBeInTheDocument()
+  })
+
+  it('redirects to /login when unauthenticated, and shows the login form', () => {
+    renderWithProviders(<App />, { auth: { status: 'unauthenticated', user: null } })
+
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /dashboard/i })).not.toBeInTheDocument()
   })
 })

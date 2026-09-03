@@ -1,4 +1,4 @@
-import type { AssetCriticality } from '../mocks/assets'
+import type { AssetCriticality } from '../api/assets'
 
 // Criticality is shown as its classification letter (the domain-standard
 // A/B/C convention), not a generic icon — colors come from the semantic

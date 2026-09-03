@@ -1,10 +1,12 @@
-import { ArrowLeft, CalendarDays, ClipboardList, FileText, QrCode } from 'lucide-react'
+import { ArrowLeft, CalendarDays, ClipboardList, FileText, QrCode, RotateCw, TriangleAlert } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { getAsset, getLocationPath, listAssets, listLocations } from '../api/assets'
+import { ApiError } from '../api/client'
 import { CriticalityBadge } from '../components/CriticalityBadge'
 import { EmptyState } from '../components/EmptyState'
 import { StatusBadge } from '../components/StatusBadge'
-import { getAssetById, getLocationPath, mockAssets } from '../mocks/assets'
+import { useAsync } from '../hooks/useAsync'
 
 const tabs = ['Overview', 'Work Order History', 'Maintenance Schedule', 'Documents', 'QR Info'] as const
 type Tab = (typeof tabs)[number]
@@ -13,23 +15,55 @@ export function AssetDetailPage() {
   const { assetId } = useParams<{ assetId: string }>()
   const [activeTab, setActiveTab] = useState<Tab>('Overview')
 
-  const asset = assetId ? getAssetById(assetId) : undefined
+  const { status, data, error, reload } = useAsync(
+    () =>
+      Promise.all([getAsset(assetId!), listLocations(), listAssets()]).then(
+        ([asset, locations, allAssets]) => ({ asset, locations, allAssets }),
+      ),
+    [assetId],
+  )
 
-  if (!asset) {
+  if (status === 'loading') {
+    return <p className="px-6 py-16 text-center text-sm text-text-secondary">Loading asset…</p>
+  }
+
+  if (status === 'error') {
+    const notFound = error instanceof ApiError && error.status === 404
+
+    if (notFound) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+          <h1 className="text-base font-semibold text-text-primary">Asset not found</h1>
+          <p className="max-w-sm text-sm text-text-secondary">
+            No asset matches “{assetId}”, or you don't have access to it.
+          </p>
+          <Link to="/assets" className="text-sm text-accent hover:underline">
+            Back to Assets
+          </Link>
+        </div>
+      )
+    }
+
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-        <h1 className="text-base font-semibold text-text-primary">Asset not found</h1>
-        <p className="max-w-sm text-sm text-text-secondary">
-          No asset matches “{assetId}” in the current data set.
+        <TriangleAlert className="h-6 w-6 text-status-danger" strokeWidth={1.5} />
+        <p className="text-sm text-text-primary">
+          {error instanceof ApiError ? error.message : 'Could not load this asset.'}
         </p>
-        <Link to="/assets" className="text-sm text-accent hover:underline">
-          Back to Assets
-        </Link>
+        <button
+          type="button"
+          onClick={reload}
+          className="inline-flex items-center gap-1.5 rounded-sm border border-border px-3 py-1.5 text-sm text-text-primary hover:border-border-strong"
+        >
+          <RotateCw className="h-3.5 w-3.5" strokeWidth={1.75} />
+          Retry
+        </button>
       </div>
     )
   }
 
-  const parentAsset = asset.parentAssetId ? mockAssets.find((a) => a.id === asset.parentAssetId) : undefined
+  const { asset, locations, allAssets } = data
+  const parentAsset = asset.parentAssetId ? allAssets.find((a) => a.id === asset.parentAssetId) : undefined
 
   return (
     <div className="flex h-full flex-col">
@@ -48,7 +82,7 @@ export function AssetDetailPage() {
               <h1 className="font-mono text-lg font-semibold tabular-nums text-text-primary">{asset.tag}</h1>
               <span className="text-lg text-text-secondary">{asset.name}</span>
             </div>
-            <p className="mt-1 text-sm text-text-secondary">{getLocationPath(asset.currentLocationId)}</p>
+            <p className="mt-1 text-sm text-text-secondary">{getLocationPath(locations, asset.currentLocationId)}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <CriticalityBadge criticality={asset.criticality} />
@@ -84,7 +118,7 @@ export function AssetDetailPage() {
             <Field label="Tag" value={<span className="font-mono tabular-nums">{asset.tag}</span>} />
             <Field label="Name" value={asset.name} />
             <Field label="Category" value={asset.category} />
-            <Field label="Location" value={getLocationPath(asset.currentLocationId)} />
+            <Field label="Location" value={getLocationPath(locations, asset.currentLocationId)} />
             <Field label="Manufacturer" value={asset.manufacturer ?? '—'} />
             <Field label="Model" value={asset.model ?? '—'} />
             <Field

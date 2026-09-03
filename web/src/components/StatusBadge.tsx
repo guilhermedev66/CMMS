@@ -1,5 +1,5 @@
 import { Archive, CheckCircle2, TriangleAlert, type LucideIcon } from 'lucide-react'
-import type { AssetStatus } from '../mocks/assets'
+import type { AssetStatus } from '../api/assets'
 
 // Status is communicated by icon + label + color together (docs/04:
 // "never color alone") — colors come from the semantic status tokens, never

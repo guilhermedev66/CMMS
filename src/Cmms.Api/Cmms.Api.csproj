@@ -17,4 +17,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!--
+      ADR-16: "OpenTelemetry adopted from M1 ... near-zero-cost to add early rather than retrofit"
+      — actually wired up here in M6, since M1-M5 never got to it; still true to the ADR's own
+      framing (a genuinely small addition, not a retrofit project). Console exporter always runs
+      (zero external dependency, visible in `docker compose logs`/Render's log stream out of the
+      box); the OTLP exporter only activates if Otel:OtlpEndpoint is configured, so this never
+      requires signing up for a tracing backend to be "on."
+    -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
+  </ItemGroup>
+
 </Project>

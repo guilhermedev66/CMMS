@@ -3,6 +3,7 @@ using Cmms.Modules.IdentityAccess.Domain;
 using Cmms.Modules.IdentityAccess.Infrastructure;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cmms.Api;
@@ -19,7 +20,10 @@ internal static class AuthEndpoints
             return Results.Ok(new { token = tokens.RequestToken });
         });
 
-        group.MapPost("/login", LoginAsync);
+        // docs/02's threat-model row: "Rate-limit login...". A tighter, IP-partitioned policy than
+        // the app-wide default one (see Program.cs) — brute-force credential guessing is the one
+        // threat this endpoint specifically needs to slow down harder than ordinary abuse.
+        group.MapPost("/login", LoginAsync).RequireRateLimiting("auth");
         group.MapPost("/logout", LogoutAsync).RequireAuthorization();
         group.MapGet("/me", Me).RequireAuthorization();
 

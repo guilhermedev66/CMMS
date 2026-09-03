@@ -36,6 +36,16 @@ public sealed class CmmsWebApplicationFactory : WebApplicationFactory<Program>
         // directly instead (see MaintenancePlanGenerationTests), which is also the more precise
         // simulation of "two ticks"/"two instances" than waiting on a real timer would be.
         Environment.SetEnvironmentVariable("PreventiveMaintenance__SchedulerEnabled", "false");
+        // Rate limiting is production-real (Program.cs), but this suite drives dozens of logins
+        // and writes from what TestServer reports as one shared loopback "IP" across many parallel
+        // test classes — raise the limits here rather than have unrelated tests fail on 429s that
+        // have nothing to do with what they're actually asserting.
+        Environment.SetEnvironmentVariable("RateLimiting__GlobalPermitLimit", "100000");
+        Environment.SetEnvironmentVariable("RateLimiting__AuthPermitLimit", "100000");
+        // Real OpenTelemetry instrumentation stays on (it's part of what's being verified as wired
+        // correctly), but the console exporter would otherwise dump a span/metric block per HTTP
+        // call across hundreds of test requests — pure log noise for this suite.
+        Environment.SetEnvironmentVariable("Otel__ConsoleExporterEnabled", "false");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

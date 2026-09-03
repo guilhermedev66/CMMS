@@ -1,0 +1,21 @@
+@Cmms_Api_HostAddress = https://localhost:7024
+
+GET {{Cmms_Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{Cmms_Api_HostAddress}}/auth/csrf
+Accept: application/json
+
+###
+
+# Send the antiforgery cookie returned above and place its response token here.
+POST {{Cmms_Api_HostAddress}}/auth/login
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf_token}}
+
+{
+  "email": "admin@cmms.local",
+  "password": "LocalDev!12345"
+}

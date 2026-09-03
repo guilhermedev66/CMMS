@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cmms.BuildingBlocks\Cmms.BuildingBlocks.csproj" />
+    <ProjectReference Include="..\Modules\IdentityAccess\IdentityAccess.csproj" />
+    <ProjectReference Include="..\Modules\Assets\Assets.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

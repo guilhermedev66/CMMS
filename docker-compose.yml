@@ -1,0 +1,43 @@
+name: cmms
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: cmms
+      POSTGRES_USER: cmms
+      POSTGRES_PASSWORD: ${CMMS_DB_PASSWORD:-cmms-local-password}
+    ports:
+      - "${CMMS_DB_PORT:-5432}:5432"
+    volumes:
+      - cmms-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cmms -d cmms"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Cmms.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      Authentication__RequireSecureCookies: "false"
+      ConnectionStrings__Cmms: Host=postgres;Port=5432;Database=cmms;Username=cmms;Password=${CMMS_DB_PASSWORD:-cmms-local-password}
+      Database__ApplyMigrations: "true"
+      BootstrapAdmin__Email: ${CMMS_BOOTSTRAP_ADMIN_EMAIL:-admin@cmms.local}
+      BootstrapAdmin__Password: ${CMMS_BOOTSTRAP_ADMIN_PASSWORD:-LocalDev!12345}
+      BootstrapAdmin__DisplayName: ${CMMS_BOOTSTRAP_ADMIN_DISPLAY_NAME:-CMMS Administrator}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${CMMS_API_PORT:-8080}:8080"
+    volumes:
+      - cmms-data-protection:/home/app/.aspnet/DataProtection-Keys
+
+volumes:
+  cmms-postgres-data:
+  cmms-data-protection:

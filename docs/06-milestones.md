@@ -35,19 +35,44 @@ foundation, Assets + Locations (CRUD + hierarchy), frontend app shell +
 design system + Light/Dark/System, Docker Compose (API + Postgres), CI
 (build + test on push), baseline unit/integration tests.
 
-Progress so far (commits `409e324`, `42a184b`): backend solution scaffold
-with IdentityAccess (per-site role membership, cookie/CSRF auth) and Assets
-(Location/Asset with database-enforced site-boundness) modules, verified
-end-to-end against a real Docker Compose + PostgreSQL deployment; frontend
-app shell, design tokens, and no-flash Light/Dark/System theming.
+Progress so far:
+- `409e324`/`42a184b`: backend solution scaffold (IdentityAccess + Assets
+  modules, cookie/CSRF auth, database-enforced site-boundness); frontend
+  app shell, design tokens, no-flash Light/Dark/System theming.
+- `8058df4`: CI (GitHub Actions — backend build+test, frontend lint+
+  typecheck+build), verified green.
+- `aa72a13`: frontend baseline tests (theme system, app shell — 15 tests),
+  wired into CI.
+- `fed913e`: backend audit trail (append-only, same-transaction writes),
+  Asset/Location CRUD, and the first real RBAC enforcement
+  (`IPermissionEvaluator`, live DB state, no cached claims) — Codex Backend
+  hit its weekly quota (2% left) mid-M1, so this slice was implemented by
+  the orchestrator directly per the fallback protocol. PostgreSQL
+  integration tests (Testcontainers) prove cross-site denial, the
+  `site_id`-immutable trigger firing, and audit-write atomicity — verified
+  independently, not just self-reported, and green in CI on GitHub's
+  runners too.
+- `0982576`: Asset List + Asset Detail frontend pages per docs/04, built
+  against mock data pending backend wiring.
 
-Still open before M1 can be marked `PASS`: RBAC/permission enforcement
-wired to actual protected endpoints (only auth exists so far — Assets has
-no CRUD endpoints yet), audit-event foundation (append-only table +
-write-path), CI pipeline (build+test on push), baseline unit/integration
-tests (including a real concurrent-write test against PostgreSQL per
-`docs/02-security-and-invariants.md`), and connecting the frontend shell to
-the real API instead of placeholder pages.
+Still open before M1 can be marked `PASS`:
+- Frontend Asset pages wired to the real API (currently mock data) — in
+  progress.
+- Codex QA smoke pass on the RBAC/audit/Assets slice — in progress (Codex
+  QA is also low on weekly quota, so this pass is deliberately narrow:
+  BLOCKER-only, two files, re-running the existing test suite rather than
+  open-ended exploration).
+- Real rendered visual/responsive verification (both themes, mobile
+  viewport) — currently verified by code inspection only (semantic tokens,
+  responsive class patterns) because headless-Chromium screenshotting needs
+  a `sudo apt-get` the agents can't run non-interactively and it wasn't
+  judged worth interrupting the user for. Tracked gap, not silently
+  dropped — revisit at the latest during M6's responsive/visual QA pass.
+- A real concurrent-write invariant test (e.g. two callers racing an
+  optimistic-concurrency edit) isn't in scope yet — the concurrency-critical
+  invariants that exist so far (site immutability, audit atomicity) are
+  tested; the classic "two people claim the same X" race test belongs to
+  the Work Order claim flow in M2, not Assets.
 
 DoD: `docker compose up` boots API + DB + runs migrations; CI green on a
 fresh clone; login → asset list → asset detail works in both themes on

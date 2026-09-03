@@ -28,12 +28,26 @@ DoD: all docs above exist, reviewed by Codex Backend (backend/architecture
 critique) and Codex QA (adversarial pass on permission matrix / threat model
 / invariants) with no open BLOCKER, then marked `M0 — APPROVED`.
 
-## M1 — Foundation & Assets
+## M1 — Foundation & Assets — IN PROGRESS
 
 Solution structure, PostgreSQL, EF Core migrations, Identity + RBAC, audit
 foundation, Assets + Locations (CRUD + hierarchy), frontend app shell +
 design system + Light/Dark/System, Docker Compose (API + Postgres), CI
 (build + test on push), baseline unit/integration tests.
+
+Progress so far (commits `409e324`, `42a184b`): backend solution scaffold
+with IdentityAccess (per-site role membership, cookie/CSRF auth) and Assets
+(Location/Asset with database-enforced site-boundness) modules, verified
+end-to-end against a real Docker Compose + PostgreSQL deployment; frontend
+app shell, design tokens, and no-flash Light/Dark/System theming.
+
+Still open before M1 can be marked `PASS`: RBAC/permission enforcement
+wired to actual protected endpoints (only auth exists so far — Assets has
+no CRUD endpoints yet), audit-event foundation (append-only table +
+write-path), CI pipeline (build+test on push), baseline unit/integration
+tests (including a real concurrent-write test against PostgreSQL per
+`docs/02-security-and-invariants.md`), and connecting the frontend shell to
+the real API instead of placeholder pages.
 
 DoD: `docker compose up` boots API + DB + runs migrations; CI green on a
 fresh clone; login → asset list → asset detail works in both themes on

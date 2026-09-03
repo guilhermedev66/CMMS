@@ -5,6 +5,8 @@
     <ProjectReference Include="..\Modules\IdentityAccess\IdentityAccess.csproj" />
     <ProjectReference Include="..\Modules\Assets\Assets.csproj" />
     <ProjectReference Include="..\Modules\Audit\Audit.csproj" />
+    <ProjectReference Include="..\Modules\MaintenanceRequests\MaintenanceRequests.csproj" />
+    <ProjectReference Include="..\Modules\WorkManagement\WorkManagement.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

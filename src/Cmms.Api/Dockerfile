@@ -7,6 +7,8 @@ COPY ["src/Cmms.BuildingBlocks/Cmms.BuildingBlocks.csproj", "src/Cmms.BuildingBl
 COPY ["src/Modules/IdentityAccess/IdentityAccess.csproj", "src/Modules/IdentityAccess/"]
 COPY ["src/Modules/Assets/Assets.csproj", "src/Modules/Assets/"]
 COPY ["src/Modules/Audit/Audit.csproj", "src/Modules/Audit/"]
+COPY ["src/Modules/MaintenanceRequests/MaintenanceRequests.csproj", "src/Modules/MaintenanceRequests/"]
+COPY ["src/Modules/WorkManagement/WorkManagement.csproj", "src/Modules/WorkManagement/"]
 RUN dotnet restore "src/Cmms.Api/Cmms.Api.csproj"
 
 COPY . .

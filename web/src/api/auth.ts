@@ -1,8 +1,19 @@
 import { apiClient } from './client'
 
+export type RoleCode = 'Admin' | 'Planner' | 'Technician' | 'Requester'
+
+export interface SiteMembership {
+  siteId: string
+  siteName: string
+  role: RoleCode
+}
+
+/** Matches the /auth/me response shape in src/Cmms.Api/AuthEndpoints.cs. */
 export interface AuthUser {
   id: string
   email: string
+  isAdmin: boolean
+  siteMemberships: SiteMembership[]
 }
 
 export function login(email: string, password: string): Promise<void> {

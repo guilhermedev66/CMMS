@@ -2,6 +2,8 @@ using Cmms.BuildingBlocks.Database;
 using Cmms.Modules.Assets.Infrastructure;
 using Cmms.Modules.Audit.Infrastructure;
 using Cmms.Modules.IdentityAccess.Infrastructure;
+using Cmms.Modules.MaintenanceRequests.Infrastructure;
+using Cmms.Modules.WorkManagement.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -45,6 +47,18 @@ public sealed class PostgresFixture : IAsyncLifetime
             options => new AuditDbContext(options), DatabaseSchemas.Audit))
         {
             await auditDb.Database.MigrateAsync();
+        }
+
+        await using (var requestsDb = CreateContext<MaintenanceRequestsDbContext>(
+            options => new MaintenanceRequestsDbContext(options), DatabaseSchemas.MaintenanceRequests))
+        {
+            await requestsDb.Database.MigrateAsync();
+        }
+
+        await using (var workOrdersDb = CreateContext<WorkManagementDbContext>(
+            options => new WorkManagementDbContext(options), DatabaseSchemas.WorkManagement))
+        {
+            await workOrdersDb.Database.MigrateAsync();
         }
     }
 

@@ -6,6 +6,11 @@ import { AppShell } from './layout/AppShell'
 import { navItems } from './nav'
 import { AssetDetailPage } from './routes/AssetDetailPage'
 import { AssetsListPage } from './routes/AssetsListPage'
+import { RequestsListPage } from './routes/RequestsListPage'
+import { WorkOrderDetailPage } from './routes/WorkOrderDetailPage'
+import { WorkOrdersListPage } from './routes/WorkOrdersListPage'
+
+const wiredPaths = new Set(['/assets', '/requests', '/work-orders'])
 
 export default function App() {
   return (
@@ -16,8 +21,11 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route path="/assets" element={<AssetsListPage />} />
           <Route path="/assets/:assetId" element={<AssetDetailPage />} />
+          <Route path="/requests" element={<RequestsListPage />} />
+          <Route path="/work-orders" element={<WorkOrdersListPage />} />
+          <Route path="/work-orders/:workOrderId" element={<WorkOrderDetailPage />} />
           {navItems
-            .filter((item) => item.path !== '/assets')
+            .filter((item) => !wiredPaths.has(item.path))
             .map((item) => (
               <Route key={item.path} path={item.path} element={<EmptyState {...item} />} />
             ))}

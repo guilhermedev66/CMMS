@@ -6,6 +6,10 @@ using Cmms.Modules.Audit;
 using Cmms.Modules.Audit.Infrastructure;
 using Cmms.Modules.IdentityAccess;
 using Cmms.Modules.IdentityAccess.Infrastructure;
+using Cmms.Modules.MaintenanceRequests;
+using Cmms.Modules.MaintenanceRequests.Infrastructure;
+using Cmms.Modules.WorkManagement;
+using Cmms.Modules.WorkManagement.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +23,8 @@ var antiforgeryCookieName = secureCookiePolicy == CookieSecurePolicy.Always
 builder.Services.AddIdentityAccess(builder.Configuration);
 builder.Services.AddAssets(builder.Configuration);
 builder.Services.AddAudit(builder.Configuration);
+builder.Services.AddMaintenanceRequests(builder.Configuration);
+builder.Services.AddWorkManagement(builder.Configuration);
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddAntiforgery(options =>
@@ -45,6 +51,12 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrations"))
     await scope.ServiceProvider
         .GetRequiredService<AuditDbContext>()
         .Database.MigrateAsync();
+    await scope.ServiceProvider
+        .GetRequiredService<MaintenanceRequestsDbContext>()
+        .Database.MigrateAsync();
+    await scope.ServiceProvider
+        .GetRequiredService<WorkManagementDbContext>()
+        .Database.MigrateAsync();
 }
 
 await IdentityAccessInitializer.BootstrapAdminAsync(app.Services, builder.Configuration);
@@ -55,11 +67,15 @@ app.UseAntiforgery();
 
 app.MapAuthEndpoints();
 app.MapAssetsEndpoints();
+app.MapMaintenanceRequestsEndpoints();
+app.MapWorkOrdersEndpoints();
 
 app.MapGet("/health", async (
     IdentityAccessDbContext identityAccess,
     AssetsDbContext assets,
     AuditDbContext audit,
+    MaintenanceRequestsDbContext maintenanceRequests,
+    WorkManagementDbContext workManagement,
     CancellationToken cancellationToken) =>
 {
     try
@@ -67,7 +83,9 @@ app.MapGet("/health", async (
         var databaseAvailable =
             await identityAccess.Database.CanConnectAsync(cancellationToken) &&
             await assets.Database.CanConnectAsync(cancellationToken) &&
-            await audit.Database.CanConnectAsync(cancellationToken);
+            await audit.Database.CanConnectAsync(cancellationToken) &&
+            await maintenanceRequests.Database.CanConnectAsync(cancellationToken) &&
+            await workManagement.Database.CanConnectAsync(cancellationToken);
 
         return databaseAvailable
             ? Results.Ok(new { status = "healthy" })

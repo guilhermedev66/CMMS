@@ -40,14 +40,14 @@ export const navItems: NavItem[] = [
     label: 'Requests',
     icon: Inbox,
     description: 'Maintenance request intake and Planner conversion to Work Orders.',
-    milestone: 'Wired up in M2 — Requests & Work Orders.',
+    milestone: 'M2 — Requests & Work Orders.',
   },
   {
     path: '/work-orders',
     label: 'Work Orders',
     icon: ClipboardList,
-    description: 'Grid and Kanban views across the guarded Work Order lifecycle.',
-    milestone: 'Wired up in M2 — Requests & Work Orders.',
+    description: 'Grid view across the guarded Work Order lifecycle. Kanban board deferred.',
+    milestone: 'M2 — Requests & Work Orders.',
   },
   {
     path: '/planning',

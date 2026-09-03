@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Cmms.Modules.IdentityAccess.Domain;
+using Cmms.Modules.IdentityAccess.Infrastructure;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace Cmms.Api;
 
@@ -80,12 +82,43 @@ internal static class AuthEndpoints
         return Results.NoContent();
     }
 
-    private static IResult Me(ClaimsPrincipal principal) =>
-        Results.Ok(new
+    /// <summary>
+    /// Site memberships are included so the frontend can offer "which site is this for" on a
+    /// create form (Request/Work Order creation requires a site id, per docs/01's site-boundness
+    /// rule) without a separate "list my sites" round trip — there is no general-purpose sites API
+    /// yet (sites.manage has no endpoint in this milestone), so this is the one place a client can
+    /// learn its own site scope. Read-only: this never grants anything by itself, it only mirrors
+    /// what IPermissionEvaluator already derives server-side on every write.
+    /// </summary>
+    private static async Task<IResult> Me(ClaimsPrincipal principal, IdentityAccessDbContext db, CancellationToken cancellationToken)
+    {
+        var rawId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(rawId, out var userId))
         {
-            id = principal.FindFirstValue(ClaimTypes.NameIdentifier),
-            email = principal.FindFirstValue(ClaimTypes.Email) ?? principal.Identity?.Name
+            return Results.Unauthorized();
+        }
+
+        var isAdmin = await db.CompanyRoleAssignments
+            .AnyAsync(assignment => assignment.UserId == userId && assignment.RoleCode == RoleCode.Admin, cancellationToken);
+
+        var memberships = await db.SiteMemberships
+            .Where(membership => membership.UserId == userId && membership.IsActive)
+            .Join(db.Sites, membership => membership.SiteId, site => site.Id, (membership, site) => new
+            {
+                siteId = site.Id,
+                siteName = site.Name,
+                role = membership.RoleCode
+            })
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            id = rawId,
+            email = principal.FindFirstValue(ClaimTypes.Email) ?? principal.Identity?.Name,
+            isAdmin,
+            siteMemberships = memberships
         });
+    }
 
     private sealed record LoginRequest(string Email, string Password);
 }

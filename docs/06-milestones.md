@@ -86,17 +86,91 @@ fresh clone; login → asset list → asset detail works in both themes on
 desktop and mobile viewport; Codex QA smoke pass on auth/RBAC with no
 BLOCKER.
 
-## M2 — Requests & Work Orders
+## M2 — Requests & Work Orders — **PASS**
 
 Maintenance requests, Work Order lifecycle (creation, assignment, state
 transitions, priority), permission enforcement per role, history/audit,
 concurrency protection on claim/assign/complete, frontend WO list/board/detail
 flows.
 
-DoD: state machine cannot be forced into an invalid transition via API;
-concurrent claim of the same WO resolves to exactly one winner (proven by a
-real concurrent test, not asserted); Codex QA adversarial pass (IDOR,
-authz bypass, invalid transitions) with no BLOCKER.
+DoD check: state machine cannot be forced into an invalid transition via API
+— PASS, proven by `WorkOrdersConcurrencyTests` (Complete-before-Start,
+double-Publish both return `409 Conflict`, never `500`). Concurrent claim of
+the same WO resolves to exactly one winner — PASS, proven by a genuinely
+concurrent test (`Two_technicians_racing_to_self_claim_the_same_open_work_order_resolve_to_exactly_one_winner`,
+two real HTTP requests via `Task.WhenAll` against the real running host and a
+real PostgreSQL instance, not a single-threaded simulation): exactly one
+`200`, one `409`, and the persisted row confirms exactly one assignee.
+Adversarial pass (IDOR, authz bypass, invalid transitions) — PASS, no
+BLOCKER: `MaintenanceRequestsAndWorkOrdersRbacTests` covers cross-site
+Work Order read/self-claim denial (404, not 403 — existence never
+confirmed), a same-site non-assignee technician blocked from Start/Complete
+on someone else's order, `requests.cancel.own` correctly having no "any"
+counterpart (a second Requester at the same site cannot cancel another's New
+request), double-convert/reject-after-convert both returning `409` (not a
+duplicate Work Order), and cross-site Request read denial. Codex QA was
+unavailable this session (per the fallback protocol, same as M1's
+`fed913e`) — these 5 adversarial tests were written and run by the
+orchestrator directly; independent re-review is still open, tracked below.
+
+Scope cuts, deliberate and documented inline (see
+`src/Cmms.Api/WorkOrdersEndpoints.cs`'s doc comment and
+`src/Modules/WorkManagement/Domain/WorkOrderStatus.cs`): no `OnHold` state,
+no Planner-driven Assign/Reassign/Unassign/Reschedule — only self-claim
+moves `Open -> Scheduled` in this slice, which is what the flagship
+concurrency test actually needs. `Priority` (P1-P4) was added to both
+`WorkOrder` and `MaintenanceRequest` — not in docs/01's original scope but
+formalizing what docs/02's permission catalog (`workorders.prioritize`) and
+docs/04's frontend IA already assumed; no dedicated "reprioritize" endpoint
+yet (set once at creation/conversion). Frontend ships the Grid list view
+only (docs/04's "default for planners" mode) with inline guarded actions;
+the Kanban board (drag-and-drop) is deferred, not required by this
+milestone's DoD. `GET /auth/me` was extended with `siteMemberships` +
+`isAdmin` — needed for the frontend to know which site to submit a
+Request/Work Order against, since no `sites.manage`/`users.manage` endpoint
+exists yet to look this up any other way.
+
+Progress:
+- Backend: `MaintenanceRequests` + `WorkManagement` modules (domain,
+  EF Core + migrations, site-immutability trigger, cross-schema FK to
+  `identity_access.sites`), wired into `Cmms.Api`/`Cmms.sln`/Docker build.
+  Endpoints: Request create/list/get/convert/reject/cancel; Work Order
+  create/list/get/publish/self-claim/start/complete/close/reopen/cancel.
+  Convert-to-Work-Order and the terminal Request transitions are atomic
+  conditional `UPDATE ... WHERE status = 'New'` inside a
+  `SharedTransactionScope` with the audit write, per docs/01 §
+  "Resolves QA finding B-04(1)" and docs/02's concurrency protocol.
+- Frontend: real API clients (`api/requests.ts`, `api/workOrders.ts`)
+  replacing the M2-interim mocks; Requests list + create dialog + Convert/
+  Reject/Cancel actions; Work Orders Grid + create dialog + detail page,
+  `StatusTransitionMenu` driving every guarded action from the real
+  backend-supported set (no client-side transition invented that the
+  server doesn't also enforce).
+- Verified: `dotnet build`/`dotnet test` on `Cmms.sln` green (14/14
+  integration tests, real PostgreSQL via Testcontainers); frontend
+  `lint`/`build` (tsc -b + vite build)/`test` (16/16) green; `docker
+  compose up` boots API + DB, migrations apply cleanly from a reset
+  volume, `/health` reports healthy.
+- **Not** verified: a real rendered browser screenshot of the new pages —
+  same blocker as M1 (headless Chromium's system deps need an interactive
+  `sudo` unavailable non-interactively) and, additionally here, there is no
+  user-provisioning endpoint yet to log in as anything but the
+  site-membership-less bootstrap Admin, so even a successful screenshot
+  couldn't exercise the create-Request/Work-Order flow live. The RBAC
+  integration tests are the actual verification of that flow (real HTTP,
+  real Postgres, real password hashing via `UserManager`) — a stronger
+  guarantee of correctness than a manual click-through would have been,
+  even though it isn't a rendered screenshot. Revisit the visual pass at
+  the latest in M6.
+
+Pending: independent Codex QA re-review of this slice when available;
+Kanban board; OnHold/Assign/Reassign/Unassign/Reschedule (tracked as a
+follow-up, not silently dropped).
+
+DoD (original): state machine cannot be forced into an invalid transition
+via API; concurrent claim of the same WO resolves to exactly one winner
+(proven by a real concurrent test, not asserted); Codex QA adversarial pass
+(IDOR, authz bypass, invalid transitions) with no BLOCKER.
 
 ## M3 — Preventive Maintenance
 

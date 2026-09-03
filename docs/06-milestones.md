@@ -550,7 +550,7 @@ Pending: independent Codex QA re-review (carried over); real-device/browser
 mobile visual pass (carried over); Docker image CI build step (carried over
 from M4, tracked for M6).
 
-## M6 — Production Readiness
+## M6 — Production Readiness — **IN PROGRESS** (blocked only on deployment execution)
 
 Adversarial QA sweep, security hardening review, concurrency re-verification,
 observability check, performance sanity, responsive/accessibility QA,
@@ -558,15 +558,113 @@ frontend visual polish, Docker + CI finalization, deploy (Vercel + Render +
 Neon), production smoke test, README + architecture docs + Notion page,
 interview-ready explanations.
 
-DoD: independent QA full pass with all BLOCKER/IMPORTANT resolved; backend
-build + unit tests + PostgreSQL/Testcontainers integration tests all green;
-frontend typecheck/lint/tests/build all green; Docker images build; CI green
-on `main`; real production deployment reachable; production smoke test
-exercises a real authenticated flow against the deployed app (not a fake
-check); documentation published.
+DoD checklist (PASS / PENDING / BLOCKED / NOT EXECUTED — no item promoted
+without the evidence next to it):
+
+- **Independent adversarial QA pass — PASS.** A fresh general-purpose agent
+  with zero prior context on this codebase (not a fork of the implementing
+  session — the actual "don't ask the implementation owner" requirement)
+  reviewed authorization/IDOR, concurrency, the attachment pipeline, the
+  SignalR hub, rate limiting, KPI math, frontend auth assumptions, and
+  test-name-vs-test-body fidelity. Found and reported 1 BLOCKER + 3
+  IMPORTANT; all 4 fixed with regression tests, re-verified green in CI
+  (see the fix commit's message for the full findings and fixes). Two
+  OPTIONAL notes were confirmed as already-honestly-disclosed, not new
+  gaps. This closes the "independent QA pass with no BLOCKER" requirement
+  carried open since M1.
+- **Security hardening — PASS**, three real gaps closed this milestone
+  that M1–M5 had promised (ADR-16, docs/02's threat-model row) but never
+  actually built: rate limiting (global + a tighter login policy + a
+  tighter uploads policy, all proven by a real test driving 429s), security
+  response headers (nosniff/X-Frame-Options/CSP/HSTS) on every response,
+  and OpenTelemetry (verified for real — ran the API against an
+  unreachable Postgres and confirmed a genuine captured trace span
+  exported to console, not just a compiling DI registration).
+- **Concurrency re-verification — PASS.** The independent QA pass's
+  BLOCKER (Cancel never force-closing an open downtime interval) was
+  exactly a concurrency/state-integrity gap; fixed and now covered by a
+  regression test proving the asset is usable again afterward. Every
+  concurrency guarantee from M2–M5 (self-claim, plan generation,
+  FullStop-overlap exclusion, attachment finalize) re-ran green in this
+  milestone's CI pushes, not just asserted as still true.
+- **Docker image builds — PASS.** CI now has a dedicated job that
+  actually builds `src/Cmms.Api/Dockerfile` on every push — M4/M5 shipped
+  without this (the .NET/frontend jobs never touched the Dockerfile), so a
+  broken image could have reached `main` silently. Closed, verified green.
+- **Backend build + unit + integration tests — PASS.** 46/46 green in CI
+  (Release config, real PostgreSQL via Testcontainers) as of this
+  milestone's last push. Not run locally this session either — same
+  Docker-daemon-unavailable-non-interactively gap carried since M4; CI is
+  the real verification, checked after every push, not assumed.
+- **Frontend typecheck/lint/build/test — PASS.** Green in CI; also
+  independently re-run by the orchestrator locally (not just trusting
+  agent self-reports) at every frontend change point in M4/M5.
+- **Performance sanity — PASS (lightweight).** Reviewed every `foreach`
+  loop in `src/Cmms.Api` for an N+1 pattern; the two real per-item loops
+  (preventive-plan generation's per-plan lock/transaction,
+  `WorkOrderDispatchHub`'s per-membership group join) are both
+  intentional — one due-plan or one site-membership per iteration is
+  bounded and correct, not a hidden fan-out over an unbounded collection.
+  `ReportingEndpoints.cs`'s aggregates are single LINQ-to-SQL queries, not
+  loop-and-fetch. Not load-tested (no environment to run one against).
+- **Responsive/accessibility QA — verified by code inspection, not a
+  rendered pass.** Same carried-over gap as M1–M5: no interactive
+  GUI/`sudo` session available to install headless-Chromium
+  non-interactively in this environment. Reviewed instead: consistent
+  semantic-token/Tailwind responsive class usage across every page built
+  in M4/M5, `aria-label`s on icon-only buttons (dismiss/remove/unlink
+  actions), `role="tablist"`/`role="tab"` on the Work Order detail tabs,
+  `capture="environment"` on evidence-photo file inputs for mobile camera
+  capture, and keyboard-operable native `<button>`/`<select>`/`<input>`
+  elements throughout (no custom click-only widgets). Revisit with an
+  actual device/browser pass when one becomes available — tracked, not
+  silently declared done.
+- **Frontend visual polish — PASS (incremental, not a redesign).** M4/M5
+  additions matched the established design system exactly (semantic
+  tokens, existing dialog/table/badge/tab patterns) rather than
+  introducing a new visual language; no ad-hoc redesign was needed or
+  attempted.
+- **CI green on `main` — PASS**, continuously, checked after every push
+  this session (not just at the end) — every commit in this milestone's
+  history was pushed, watched, and confirmed green before the next one
+  started, including two real bug-catches (a test's own arithmetic error,
+  and the QA-found BLOCKER) that were fixed and reverified in the open,
+  not silently squashed away.
+- **Real production deployment reachable — BLOCKED.** `render.yaml` and
+  `vercel.json` are committed and ready; actually provisioning a Render
+  service, a Neon database, and a Vercel project requires the project
+  owner's own account access/card-free signups, which this agent cannot
+  do non-interactively. This is the one genuine hard blocker in this
+  milestone per the project's own autonomy rules — everything else
+  proceeded without stopping to ask.
+- **Production smoke test — NOT EXECUTED** (depends on the deployment
+  above; cannot be faked from CI alone per this project's own explicit
+  rule).
+- **Documentation published — PASS.** `README.md` written from scratch
+  this milestone (previously did not exist) covering problem/architecture/
+  domain/concurrency/security/observability/reporting/testing/running-
+  locally/deployment/trade-offs, all cross-referenced to the `docs/`
+  sources rather than restating them from memory. Notion page — not
+  attempted; no Notion integration is connected in this environment.
+
+Pending, carried forward, not silently dropped: independent QA has now
+happened once (this milestone) — a second pass after any further changes
+would still be additive value, not a requirement this closure depends on.
+Real-device/browser visual QA remains open since M1. Interview-ready
+explanations: the README's *Trade-offs and scope cuts* section and every
+milestone's evidence trail in this document together are the interview
+material — no separate slide deck was produced.
 
 ## Closure
 
 When M0–M6 are all `PASS`, produce a closure report distinguishing PASS /
 PENDING / BLOCKED / NOT EXECUTED per check — no invented validation. Only
 then: `PROJECT COMPLETE`, `DEPLOYED`, `PORTFOLIO READY`, `FROZEN`.
+
+As of this document's last update: **M0–M5 PASS, M6 blocked only on the
+deployment/production-smoke-test pair**, which needs the project owner's
+account access. Every other M6 checklist item is PASS with evidence above.
+Closure is deliberately not declared while a real, reachable deployment and
+a real production smoke test are still open — declaring `PROJECT COMPLETE`
+before those exist would be exactly the kind of invented validation this
+section exists to prevent.

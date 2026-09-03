@@ -12,8 +12,9 @@ namespace Cmms.Api;
 /// <summary>
 /// Maintenance Plan CRUD (create/list/get/pause/resume), per docs/02-security-and-invariants.md's
 /// atomic permission table (<c>plans.*</c> rows). The actual occurrence-generation job lives in
-/// <c>Cmms.Modules.PreventiveMaintenance.Application.MaintenancePlanGenerationRunner</c> — this
-/// file is only the management surface a Planner/Admin uses to define and pause/resume a plan.
+/// <see cref="MaintenancePlanGenerationRunner"/> (same project, see that type's doc comment for why
+/// it isn't inside the PreventiveMaintenance module itself) — this file is only the management
+/// surface a Planner/Admin uses to define and pause/resume a plan.
 /// </summary>
 internal static class MaintenancePlansEndpoints
 {

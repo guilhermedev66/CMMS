@@ -245,6 +245,23 @@ Progress:
 Pending: independent Codex QA re-review (carried over from M2, same
 fallback reason); calendar month/week grid.
 
+Additional gaps found on a post-hoc self-audit of this milestone (fixed one
+stale doc-comment cross-reference in `MaintenancePlansEndpoints.cs` left
+over from moving the generation runner into `Cmms.Api`; these three are
+scope notes, not fixed, since none are in the DoD above): no plan-edit
+endpoint (create/pause/resume only — changing a plan's interval/asset/title
+after creation isn't supported yet); due dates are plain UTC instants with
+no site-local calendar semantics (a `Site` has a `TimeZone` field, but
+`MaintenancePlan.NextDueAtUtc` doesn't use it — consistent with the
+already-documented day-interval-only recurrence simplification, just not
+previously spelled out for timezones specifically); the Reopen/
+already-regenerated coexistence edge case docs/01 explicitly accepts
+("flagged to the Planner via the overdue/duplicate-alert UI rather than
+prevented outright") has no such alert UI built yet — the underlying
+behavior (both orders can coexist, neither corrupts plan state) is correct
+and covered by `ClearActiveOccurrence`'s idempotent guard, just not
+surfaced visually.
+
 ## M4 — Maintenance Execution
 
 Technician workflow, checklist execution, downtime capture, parts/costs

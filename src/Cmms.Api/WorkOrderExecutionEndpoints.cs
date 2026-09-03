@@ -380,7 +380,8 @@ internal static class WorkOrderExecutionEndpoints
             mutate: async (workOrdersDb, workOrder, actorUserId, cancellationToken) =>
             {
                 var interval = await workOrdersDb.DowntimeIntervals.FirstOrDefaultAsync(
-                    i => i.Id == intervalId && i.WorkOrderId == id, cancellationToken);
+                    i => i.Id == intervalId && i.WorkOrderId == id && i.ExecutionCycle == workOrder.ExecutionCycle,
+                    cancellationToken);
                 if (interval is null)
                 {
                     return Results.NotFound();

@@ -7,6 +7,7 @@ using Cmms.Modules.Attachments.Infrastructure;
 using Cmms.Modules.IdentityAccess.Domain;
 using Cmms.Modules.IdentityAccess.Infrastructure;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
@@ -183,6 +184,55 @@ public sealed class AttachmentsAndQrSecurityTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, download.StatusCode);
         Assert.Equal("attachment", download.Content.Headers.ContentDisposition!.DispositionType);
         Assert.Contains("nosniff", download.Headers.GetValues("X-Content-Type-Options"));
+    }
+
+    /// <summary>
+    /// Regression test for a review finding: finalize used to read the upload intent without a row
+    /// lock, so two genuinely concurrent finalize calls for the same intent (docs/02 names
+    /// finalization as a genuine at-least-once retry boundary) both raced to decode/re-encode and
+    /// insert an Attachment row keyed by the same id, and the loser hit an unhandled PK-violation
+    /// 500 instead of a graceful idempotent reply. Two real concurrent HTTP requests, not simulated.
+    /// </summary>
+    [Fact]
+    public async Task Concurrent_finalize_calls_for_the_same_intent_resolve_to_one_attachment_not_an_error()
+    {
+        using var plannerClient = _factory.CreateClient();
+        await plannerClient.LoginAsync(_plannerEmail, Password);
+        using var technicianClient = _factory.CreateClient();
+        await technicianClient.LoginAsync(_technicianEmail, Password);
+
+        var workOrderId = await CreateInProgressWorkOrderAsync(plannerClient, technicianClient);
+        var intentResponse = await technicianClient.PostJsonWithCsrfAsync(
+            $"/work-orders/{workOrderId}/attachments/upload-intents",
+            new { declaredContentType = "image/jpeg", originalFileName = (string?)null });
+        var intent = await intentResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var intentId = intent.GetProperty("id").GetGuid();
+        await technicianClient.PutBytesWithCsrfAsync($"/attachments/upload-intents/{intentId}/bytes", BuildValidJpeg(), "image/jpeg");
+
+        var csrf1 = await technicianClient.GetCsrfTokenAsync();
+        var csrf2 = await technicianClient.GetCsrfTokenAsync();
+
+        Task<HttpResponseMessage> FinalizeAsync(string csrfToken)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, $"/attachments/upload-intents/{intentId}/finalize");
+            request.Headers.Add("X-CSRF-TOKEN", csrfToken);
+            return technicianClient.SendAsync(request);
+        }
+
+        var results = await Task.WhenAll(FinalizeAsync(csrf1), FinalizeAsync(csrf2));
+
+        Assert.All(results, r => Assert.True(
+            r.StatusCode is HttpStatusCode.Created or HttpStatusCode.OK,
+            $"Expected 201 or 200, got {r.StatusCode}"));
+
+        var attachmentIds = await Task.WhenAll(results.Select(async r =>
+            (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid()));
+        Assert.Equal(attachmentIds[0], attachmentIds[1]);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var attachmentsDb = scope.ServiceProvider.GetRequiredService<AttachmentsDbContext>();
+        var count = await attachmentsDb.Attachments.CountAsync(a => a.UploadIntentId == intentId);
+        Assert.Equal(1, count);
     }
 
     [Fact]

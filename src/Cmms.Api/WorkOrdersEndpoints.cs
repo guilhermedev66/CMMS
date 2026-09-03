@@ -619,6 +619,7 @@ internal static class WorkOrdersEndpoints
         }
 
         var beforeStatus = workOrder.Status;
+        var beforeExecutionCycle = workOrder.ExecutionCycle;
         try
         {
             if (mutateWithActor is not null)
@@ -634,6 +635,28 @@ internal static class WorkOrdersEndpoints
         {
             await transactionScope.RollbackAsync(cancellationToken);
             return Results.Conflict(new { error = ex.Message });
+        }
+
+        // docs/01: "Any open (unclosed) labor or downtime interval is force-closed with a
+        // system-generated end timestamp ... when a Work Order is Cancelled, or when Reopen starts
+        // a new cycle over a still-open prior interval." Left unhandled, an open FullStop interval
+        // on a now-terminal (Cancelled) Work Order can never be closed through the API again
+        // (CloseDowntimeIntervalAsync requires a non-terminal order) — and since the exclusion
+        // constraint treats FullStop-with-no-end as occupying the asset indefinitely, that
+        // permanently blocks any future FullStop interval on the same asset. Uses
+        // `beforeExecutionCycle` (captured above, before Reopen's own increment) since Reopen's
+        // "still-open prior interval" is in the cycle that just ended, not the new one.
+        if (action is "workorder.cancelled" or "workorder.reopened")
+        {
+            var openIntervals = await workOrdersDb.DowntimeIntervals
+                .Where(interval => interval.WorkOrderId == workOrder.Id &&
+                                    interval.ExecutionCycle == beforeExecutionCycle &&
+                                    interval.EndedAtUtc == null)
+                .ToListAsync(cancellationToken);
+            foreach (var interval in openIntervals)
+            {
+                interval.ForceCloseAsSystem();
+            }
         }
 
         await workOrdersDb.SaveChangesAsync(cancellationToken);

@@ -121,6 +121,7 @@ builder.Services.AddAntiforgery(options =>
 // tests fighting production-realistic limits that have nothing to do with what they're asserting.
 var globalPermitLimit = builder.Configuration.GetValue("RateLimiting:GlobalPermitLimit", 120);
 var authPermitLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
+var uploadsPermitLimit = builder.Configuration.GetValue("RateLimiting:UploadsPermitLimit", 20);
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -159,6 +160,25 @@ builder.Services.AddRateLimiter(options =>
                 SegmentsPerWindow = 4,
                 QueueLimit = 0
             }));
+
+    // 20 x 15MB (HardMaxBytes in AttachmentsEndpoints.cs) = 300MB/min ceiling per user — still
+    // generous for real technician evidence-photo usage, but well short of the ~1.8GB/min the
+    // shared global budget alone would allow (docs/02 names "uploads" as its own rate-limit target,
+    // not just an instance of ordinary write traffic).
+    options.AddPolicy("uploads", httpContext =>
+    {
+        var partitionKey = httpContext.User.Identity?.IsAuthenticated == true
+            ? $"user:{httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value}"
+            : $"ip:{httpContext.Connection.RemoteIpAddress}";
+
+        return RateLimitPartition.GetSlidingWindowLimiter($"uploads:{partitionKey}", _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = uploadsPermitLimit,
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 4,
+            QueueLimit = 0
+        });
+    });
 });
 
 var app = builder.Build();

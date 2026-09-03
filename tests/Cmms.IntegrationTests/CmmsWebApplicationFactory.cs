@@ -42,6 +42,7 @@ public sealed class CmmsWebApplicationFactory : WebApplicationFactory<Program>
         // have nothing to do with what they're actually asserting.
         Environment.SetEnvironmentVariable("RateLimiting__GlobalPermitLimit", "100000");
         Environment.SetEnvironmentVariable("RateLimiting__AuthPermitLimit", "100000");
+        Environment.SetEnvironmentVariable("RateLimiting__UploadsPermitLimit", "100000");
         // Real OpenTelemetry instrumentation stays on (it's part of what's being verified as wired
         // correctly), but the console exporter would otherwise dump a span/metric block per HTTP
         // call across hundreds of test requests — pure log noise for this suite.

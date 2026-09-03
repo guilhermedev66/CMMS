@@ -173,6 +173,41 @@ public sealed class WorkOrderExecutionTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
     }
 
+    /// <summary>
+    /// Regression test for a review finding: cancelling a Work Order with a still-open FullStop
+    /// downtime interval used to leave it open forever — the interval could never be closed through
+    /// the API again (Closing requires a non-terminal Work Order) and, because the exclusion
+    /// constraint treats an open FullStop interval as occupying the asset indefinitely, the asset
+    /// could never get a new FullStop interval either, on any future Work Order. docs/01: "Any open
+    /// ... downtime interval is force-closed with a system-generated end timestamp ... when a Work
+    /// Order is Cancelled."
+    /// </summary>
+    [Fact]
+    public async Task Cancelling_a_work_order_force_closes_its_open_downtime_interval_and_frees_the_asset()
+    {
+        using var plannerClient = _factory.CreateClient();
+        await plannerClient.LoginAsync(_plannerEmail, Password);
+        using var technicianClient = _factory.CreateClient();
+        await technicianClient.LoginAsync(_technicianEmail, Password);
+
+        var firstWorkOrderId = await CreateInProgressWorkOrderAsync(plannerClient, technicianClient);
+        var open = await technicianClient.PostJsonWithCsrfAsync($"/work-orders/{firstWorkOrderId}/downtime-intervals", new { classification = "FullStop" });
+        Assert.Equal(HttpStatusCode.Created, open.StatusCode);
+
+        var cancel = await plannerClient.PostJsonWithCsrfAsync($"/work-orders/{firstWorkOrderId}/cancel", new { reason = "Superseded" });
+        Assert.Equal(HttpStatusCode.OK, cancel.StatusCode);
+
+        var intervals = await technicianClient.GetFromJsonAsync<JsonElement[]>($"/work-orders/{firstWorkOrderId}/downtime-intervals");
+        var interval = intervals!.Single();
+        Assert.NotEqual(JsonValueKind.Null, interval.GetProperty("endedAtUtc").ValueKind);
+
+        // The asset must be usable again — a brand new Work Order can open a fresh FullStop
+        // interval on the same asset without hitting the exclusion constraint.
+        var secondWorkOrderId = await CreateInProgressWorkOrderAsync(plannerClient, technicianClient);
+        var reopenOnAsset = await technicianClient.PostJsonWithCsrfAsync($"/work-orders/{secondWorkOrderId}/downtime-intervals", new { classification = "FullStop" });
+        Assert.Equal(HttpStatusCode.Created, reopenOnAsset.StatusCode);
+    }
+
     [Fact]
     public async Task Part_usage_idempotency_key_deduplicates_a_retried_posting()
     {

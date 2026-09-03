@@ -49,7 +49,12 @@ internal static class AttachmentsEndpoints
         workOrderAttachments.MapPost("/upload-intents", CreateUploadIntentAsync);
 
         var attachments = endpoints.MapGroup("/attachments").WithTags("Attachments").RequireAuthorization();
-        attachments.MapPut("/upload-intents/{intentId:guid}/bytes", UploadBytesAsync);
+        // docs/02's threat-model row names uploads as a distinct rate-limit target from ordinary
+        // writes — up to 15MB per call (see HardMaxBytes), so the app-wide 120/min budget alone
+        // would still let one account push well over a gigabyte a minute. A dedicated tighter
+        // policy (see Program.cs's "uploads" policy) closes that gap specifically, rather than
+        // uploads only ever sharing the generic budget every other endpoint does.
+        attachments.MapPut("/upload-intents/{intentId:guid}/bytes", UploadBytesAsync).RequireRateLimiting("uploads");
         attachments.MapPost("/upload-intents/{intentId:guid}/finalize", FinalizeAsync);
         attachments.MapGet("/{id:guid}/download", DownloadAsync);
         attachments.MapPost("/{id:guid}/unlink", UnlinkAsync);
@@ -207,11 +212,38 @@ internal static class AttachmentsEndpoints
         await using var workOrdersDb = transactionScope.CreateContext<WorkManagementDbContext>(options => new WorkManagementDbContext(options));
         await using var auditDb = transactionScope.CreateContext<AuditDbContext>(options => new AuditDbContext(options));
 
-        var intent = await attachmentsDb.UploadIntents.FirstOrDefaultAsync(i => i.Id == intentId, cancellationToken);
+        // Root-row lock on the intent itself — docs/02 lists "attachment upload finalization, if a
+        // client can plausibly retry it" as a genuine at-least-once retry boundary. Without this
+        // lock, two genuinely concurrent finalize calls for the same intent both read Status ==
+        // Uploaded, both decode/re-encode, and the loser hits an unhandled PK violation on Insert
+        // instead of the graceful "already finalized" reply below — a real bug found on review, not
+        // a hypothetical.
+        var intent = await attachmentsDb.UploadIntents
+            .FromSqlInterpolated($"SELECT * FROM attachments.upload_intents WHERE id = {intentId} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
         var actorUserId = permissions.GetUserId(httpContext.User);
         if (intent is null || actorUserId != intent.ActorUserId)
         {
             return Results.NotFound();
+        }
+
+        // A concurrent racer that already finalized this exact intent while we waited for the lock
+        // above — reply with the attachment it created instead of trying (and failing) to redo the
+        // work. Re-authorization still happens for real: only the original actor could have reached
+        // this point (the ActorUserId check above), and CanWriteWorkOrderAsync below still re-checks
+        // current Work Order state before this replay is returned.
+        if (intent.Status == AttachmentUploadIntentStatus.Active)
+        {
+            var existingWorkOrder = await workOrdersDb.WorkOrders.AsNoTracking().FirstOrDefaultAsync(w => w.Id == intent.ParentResourceId, cancellationToken);
+            if (existingWorkOrder is null || !await CanWriteWorkOrderAsync(existingWorkOrder, httpContext.User, permissions, cancellationToken))
+            {
+                return Results.NotFound();
+            }
+
+            var existingAttachment = await attachmentsDb.Attachments.AsNoTracking().FirstOrDefaultAsync(a => a.UploadIntentId == intent.Id, cancellationToken);
+            return existingAttachment is null
+                ? Results.Conflict(new { error = "This upload intent is Active but its attachment record is missing — data inconsistency." })
+                : Results.Ok(AttachmentResponse.From(existingAttachment));
         }
 
         if (intent.IsExpired(DateTimeOffset.UtcNow))

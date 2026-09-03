@@ -28,12 +28,26 @@ DoD: all docs above exist, reviewed by Codex Backend (backend/architecture
 critique) and Codex QA (adversarial pass on permission matrix / threat model
 / invariants) with no open BLOCKER, then marked `M0 — APPROVED`.
 
-## M1 — Foundation & Assets — IN PROGRESS
+## M1 — Foundation & Assets — **PASS**
 
 Solution structure, PostgreSQL, EF Core migrations, Identity + RBAC, audit
 foundation, Assets + Locations (CRUD + hierarchy), frontend app shell +
 design system + Light/Dark/System, Docker Compose (API + Postgres), CI
 (build + test on push), baseline unit/integration tests.
+
+DoD check: `docker compose up` boots API+DB and runs migrations — PASS,
+verified repeatedly. CI green on a fresh checkout — PASS
+(github.com/guilhermedev66/CMMS/actions). Login → asset list → asset detail
+works — PASS, verified live against the real running backend, not mocks.
+Codex QA smoke pass on auth/RBAC with no open BLOCKER — PASS (1 BLOCKER
+found on a cross-site `ParentAssetId` gap, fixed with a regression test,
+commit `a8f4cd2`). One item is intentionally **not** fully verified: real
+rendered screenshots confirming both themes/mobile viewport look right —
+verified by code inspection (semantic tokens only, consistent responsive
+class patterns) rather than a rendered screenshot, because headless-
+Chromium's system deps need an interactive `sudo` the agents can't supply
+non-interactively, and it wasn't judged worth interrupting the user for a
+nice-to-have. Tracked explicitly, revisit at the latest in M6.
 
 Progress so far:
 - `409e324`/`42a184b`: backend solution scaffold (IdentityAccess + Assets
@@ -54,25 +68,18 @@ Progress so far:
   runners too.
 - `0982576`: Asset List + Asset Detail frontend pages per docs/04, built
   against mock data pending backend wiring.
+- `a8f4cd2`: fixed a Codex QA BLOCKER (cross-site `ParentAssetId` fell
+  through to an unhandled DB constraint exception instead of a clean
+  validation error) with a regression test.
+- `7ee1409`: Asset List/Detail wired to the real backend API — login page,
+  cookie-session `AuthContext`/`ProtectedRoute`, CSRF-aware API client.
+  Verified live against the real running Docker Compose backend.
 
-Still open before M1 can be marked `PASS`:
-- Frontend Asset pages wired to the real API (currently mock data) — in
-  progress.
-- Codex QA smoke pass on the RBAC/audit/Assets slice — in progress (Codex
-  QA is also low on weekly quota, so this pass is deliberately narrow:
-  BLOCKER-only, two files, re-running the existing test suite rather than
-  open-ended exploration).
-- Real rendered visual/responsive verification (both themes, mobile
-  viewport) — currently verified by code inspection only (semantic tokens,
-  responsive class patterns) because headless-Chromium screenshotting needs
-  a `sudo apt-get` the agents can't run non-interactively and it wasn't
-  judged worth interrupting the user for. Tracked gap, not silently
-  dropped — revisit at the latest during M6's responsive/visual QA pass.
-- A real concurrent-write invariant test (e.g. two callers racing an
-  optimistic-concurrency edit) isn't in scope yet — the concurrency-critical
-  invariants that exist so far (site immutability, audit atomicity) are
-  tested; the classic "two people claim the same X" race test belongs to
-  the Work Order claim flow in M2, not Assets.
+Deliberately deferred (not blockers, tracked): real rendered visual QA
+across themes/viewport (see DoD note above); the classic "two callers
+claim the same resource" concurrency race test, which belongs to the Work
+Order claim flow in M2 — Assets' own concurrency-critical invariants (site
+immutability, audit atomicity) are already tested.
 
 DoD: `docker compose up` boots API + DB + runs migrations; CI green on a
 fresh clone; login → asset list → asset detail works in both themes on

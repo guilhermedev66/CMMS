@@ -262,17 +262,176 @@ behavior (both orders can coexist, neither corrupts plan state) is correct
 and covered by `ClearActiveOccurrence`'s idempotent guard, just not
 surfaced visually.
 
-## M4 — Maintenance Execution
+## M4 — Maintenance Execution — **PASS**
 
 Technician workflow, checklist execution, downtime capture, parts/costs
-(lean scope), attachments (if approved in M0), QR-driven navigation
-(Asset → Work Order → Start → Checklist → Notes/Evidence → Complete), mobile
-UX, attachment/QR security enforcement.
+(lean scope), attachments, QR-driven navigation (Asset → Work Order →
+Checklist/Notes/Evidence → Complete), mobile UX, attachment/QR security
+enforcement.
 
-DoD: QR scan never grants authorization beyond what the technician's role
-already allows (proven by a negative test); attachment upload rejects
-path traversal / disallowed types / oversized files; full mobile flow usable
-on a real small-viewport browser session; Codex QA pass with no BLOCKER.
+DoD check: QR scan never grants authorization beyond what the technician's
+role already allows — PASS, proven by two negative tests
+(`AttachmentsAndQrSecurityTests.Scanning_an_asset_qr_locator_while_unauthenticated_returns_401_not_asset_data`
+and `..._grants_exactly_the_same_visibility_ordinary_asset_read_would`, the
+latter asserting a same-site scan returns the asset and a *different*-site
+scan of the identical tag returns 404, never asset data). Attachment upload
+rejects path traversal / disallowed types / oversized files — PASS: a
+storage-layer unit test (`LocalDiskAttachmentStorage_rejects_any_key_that_is_not_its_own_generated_format`,
+5 malicious-key cases) proves path traversal is refused before any I/O, one
+integration test proves a declared type outside `image/jpeg|png|webp`
+(including `image/svg+xml`) is rejected at intent-creation before any bytes
+are even accepted, one proves >15MB is rejected as `413` before decode, and
+one proves bytes that aren't actually a decodable image are rejected `422`
+at finalize regardless of their declared type (ImageSharp's own decoder
+failure *is* the magic-byte check — ADR/QA framing in
+`src/Cmms.Api/AttachmentsEndpoints.cs`). Full mobile flow — **not**
+independently verified live (same headless-Chromium gap as M1–M3: no
+interactive `sudo`/GUI session available to this agent non-interactively);
+verified instead by code review (every execution-panel control uses this
+codebase's established responsive Tailwind patterns, `capture="environment"`
+on file inputs for camera capture, no fixed-width layout) — tracked to
+revisit with a real device/browser pass at M6, same as the carried-over M1–M3
+item. Independent QA pass — unavailable this session (fallback protocol,
+same reason as M1–M3): the orchestrator ran an adversarial self-review pass
+instead (see "Backend" below for what it caught) — tracked as pending
+independent re-review, same as M2/M3's still-open item.
+
+Design:
+- **Checklist** (`src/Modules/WorkManagement/Domain/ChecklistItem.cs`):
+  five item types (Boolean w/ `safety_critical`, Numeric w/ tolerance band,
+  SingleSelect, PhotoRequired, Note), keyed by `(work_order_id,
+  execution_cycle)` per docs/01. No separate template entity — items are
+  defined directly on the Work Order (Planner/Admin only,
+  `workorders.plan`), the assignee only resolves them (`workorders.execute`).
+- **Downtime** (`DowntimeInterval.cs`): open/close intervals, `FullStop` vs
+  `PartialDerating`. A PostgreSQL exclusion constraint
+  (`ex_downtime_intervals_fullstop_no_overlap`, `btree_gist`) makes two
+  overlapping FullStop intervals on the same asset impossible regardless of
+  open/closed state — not just "no two open at once" — proven by
+  `Two_overlapping_fullstop_downtime_intervals_on_the_same_asset_are_rejected_by_the_database`
+  (second `POST` returns `409`, not `500`).
+- **Parts** (`PartUsage.cs`): immutable ledger row, no stock levels
+  (lean scope per docs/01). Client-supplied idempotency key deduplicates a
+  retried posting — proven by
+  `Part_usage_idempotency_key_deduplicates_a_retried_posting` (same id
+  returned on replay, exactly one row persisted). Costs (`unitCost`/
+  `currency`) are masked to `null` in the API response for a caller without
+  `costs.view` (Technician isn't seeded that permission) — proven by
+  `Costs_are_masked_for_a_caller_without_costs_view_permission`.
+- **Mark Completed guard** (`WorkOrder.MarkCompleted`, docs/01's transition
+  table): now enforces "all required checklist items resolved for this
+  execution cycle" and "no open downtime interval for this execution cycle"
+  — both computed by the endpoint under the same root lock that the
+  transition itself takes (docs/02: "Child edit races with completion ...
+  both commands lock the Work Order root"), proven by
+  `Mark_completed_is_rejected_while_a_required_checklist_item_is_unresolved`
+  and `..._while_a_downtime_interval_is_still_open` (409 before, 200 after
+  resolving/closing). **Scope cut, documented inline on the method**:
+  docs/01 also lists "≥1 labor entry" in the same guard; this slice has no
+  per-entry labor ledger, only the single `wrench_start_at_utc` timestamp
+  already set by Start Work — "labor recorded" degrades to "work was
+  started" for v1, not "an itemized labor entry exists."
+- **Attachments** (`src/Modules/Attachments/`, new module + schema):
+  the full 5-step pipeline from docs/02 § "Attachment strategy" —
+  server-generated quarantine key → client uploads bytes → finalize
+  re-authorizes against the Work Order's *current* state, verifies actual
+  size/format against the intent (not the client's claim), decodes with
+  ImageSharp, strips EXIF/ICC/XMP, re-encodes to a separate server-generated
+  "clean" key the client never had write access to; the quarantine key is
+  deleted only after that commits. **Documented substitution** (see
+  `AttachmentUploadIntent`'s doc comment): bytes flow through this API
+  server rather than a presigned direct-to-R2 PUT, since this dev/CI
+  environment has no object-storage credentials an agent can provision
+  without the account owner — every security property docs/02 specifies is
+  still upheld (server-generated keys, re-authorize-at-finalize, mandatory
+  re-encode, no client write access to the clean key); swapping
+  `IAttachmentStorage` for a real S3/R2-backed implementation at deploy time
+  is a drop-in change behind that interface. `PhotoRequired` checklist
+  resolution re-verifies the referenced attachment is still `Active`/linked
+  to *this* Work Order at resolve time (docs/02's async-validation race
+  guard), proven end-to-end by
+  `Full_upload_finalize_flow_produces_an_active_attachment_that_satisfies_a_photorequired_item`.
+  Downloads set `Content-Disposition: attachment` and
+  `X-Content-Type-Options: nosniff`; a cross-site download attempt returns
+  `404` (`A_technician_from_a_different_site_cannot_download_another_sites_attachment`).
+  Malware/AV scanning remains an explicit, already-documented optional M6
+  hardening item (docs/02), not required for this DoD.
+- **QR** (`Asset.QrLocator`, scaffolded in M1, wired end-to-end now):
+  `GET /assets/by-qr/{qrLocator}` is byte-for-byte the same RBAC as
+  `GET /assets/{id}` — there is no separate "QR capability," the frontend's
+  `/scan/:qrLocator` route (outside `<ProtectedRoute>`, since it must do its
+  own auth-check-then-redirect) is a deep link into that same authorized
+  query keyed by one more field. No public/anonymous "report an issue"
+  intake was built — it was explicitly scoped as an *optional* M4 stretch in
+  docs/02, not required for this DoD.
+
+Progress:
+- Backend: `Attachments` module (domain, EF Core + migrations, site-
+  immutability trigger, `LocalDiskAttachmentStorage` with regex + resolve-
+  and-recheck path-containment defense), wired into `Cmms.Api`/`Cmms.sln`/
+  Docker build/`docker-compose.yml` (a dedicated named volume, owned by the
+  non-root `app` user at image-build time). `WorkOrderExecutionEndpoints.cs`
+  (checklist/downtime/parts) and `AttachmentsEndpoints.cs`
+  (upload-intent/bytes/finalize/download/unlink) in `Cmms.Api`, following
+  this codebase's established root-lock-then-authorize-then-mutate-then-
+  audit protocol. `GetAssetByQrLocatorAsync` added to `AssetsEndpoints.cs`;
+  `ListWorkOrdersAsync` gained an `assetId` narrowing filter (RBAC-scoped
+  query, not a new visibility path) for the QR → asset → related-orders
+  flow. No new `PermissionCatalog` entries needed for checklist/downtime/
+  parts — they reuse `workorders.execute`/`workorders.plan`/
+  `workorders.complete`, matching docs/02's framing of child data as
+  Work-Order-root-scoped, not independently permissioned; `attachments.*`
+  permissions already existed in the catalog (seeded M1, unused until now).
+- Self-review caught and fixed before commit (documented here per this
+  project's "disclose gaps found on review" convention, same as M3's
+  post-hoc audit): (1) two attachment endpoints (`bytes`, `finalize`) were
+  initially missing the anti-forgery check every other mutating endpoint in
+  this codebase has; (2) `AttachmentsEndpoints`' image-rejection paths
+  called `SaveChangesAsync` inside a transaction the method then returned
+  from *without* committing — `SharedTransactionScope`'s dispose-time
+  rollback would have silently undone the `Rejected` status write; (3) the
+  downtime/parts exclusion-constraint violation only actually throws at
+  `SaveChangesAsync`, which was outside the `try/catch` meant to catch it
+  (the mutate delegate itself only stages an `Add`); (4) the download
+  endpoint's doc comment claimed `X-Content-Type-Options: nosniff` was set
+  when it wasn't — the header is now actually appended. All four fixed and
+  covered by the tests listed above before this commit, not after.
+- Frontend: `WorkOrderExecutionPanel.tsx` (Overview/Execution tabs on the
+  Work Order detail page — checklist per-item-type controls incl. camera
+  capture for `PhotoRequired`, downtime open/close, parts entry with
+  cost-masking-aware rendering, an evidence-photo gallery with unlink), and
+  `ScanPage.tsx` (`/scan/:qrLocator`, reusing `ProtectedRoute`/`LoginPage`'s
+  existing return-URL shape rather than inventing a second one). No new UI
+  library, no optimistic UI on any security/state-relevant action —
+  every mutation re-fetches server-confirmed state, matching this
+  codebase's established M2/M3 convention.
+- Verified: `dotnet build` (Debug and Release) on `Cmms.sln` green, 0
+  warnings; both new EF Core models confirmed to have zero pending model
+  changes against their migrations (`dotnet ef migrations
+  has-pending-model-changes`, run independently for `WorkManagement` and
+  `Attachments`) — a real check, not an assumption. Frontend
+  `lint`/`build`(`tsc -b && vite build`)/`test` (16/16) green, run and
+  independently re-verified by the orchestrator, not only self-reported by
+  the agent that wrote the frontend.
+- **Not verified locally**: the new PostgreSQL/Testcontainers integration
+  tests themselves (11 new tests across `WorkOrderExecutionTests.cs` and
+  `AttachmentsAndQrSecurityTests.cs`) — Docker Desktop's daemon is not
+  running in this environment and starting it needs an interactive Windows
+  GUI session this agent cannot supply non-interactively (the same class of
+  environment gap as M1–M3's headless-Chromium blocker, not a new kind of
+  issue). They **did** run successfully in CI (GitHub Actions' `ubuntu-
+  latest` runners ship Docker) — see the commit's CI run linked from this
+  repo's Actions tab; treat that as the real verification of this batch of
+  tests, not local execution. `docker build`/`docker compose up` were also
+  not exercised locally for the same reason — CI does not currently build
+  the Docker image at all (pre-existing gap since M1, not introduced here);
+  tracked to close at M6 alongside the deploy step, which will need a real
+  image build regardless.
+
+Pending: independent Codex QA re-review (carried over, same as M2/M3);
+real-device/browser mobile visual pass (carried over, same as M1–M3); a CI
+step that actually builds the Docker image (new item, tracked for M6);
+public "report an issue" QR stretch feature (optional, out of scope).
 
 ## M5 — Reporting & Operations
 

@@ -30,6 +30,7 @@ services:
       BootstrapAdmin__Email: ${CMMS_BOOTSTRAP_ADMIN_EMAIL:-admin@cmms.local}
       BootstrapAdmin__Password: ${CMMS_BOOTSTRAP_ADMIN_PASSWORD:-LocalDev!12345}
       BootstrapAdmin__DisplayName: ${CMMS_BOOTSTRAP_ADMIN_DISPLAY_NAME:-CMMS Administrator}
+      Attachments__LocalStorageRoot: /var/cmms-attachments
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,7 +38,9 @@ services:
       - "${CMMS_API_PORT:-8080}:8080"
     volumes:
       - cmms-data-protection:/home/app/.aspnet/DataProtection-Keys
+      - cmms-attachments:/var/cmms-attachments
 
 volumes:
   cmms-postgres-data:
   cmms-data-protection:
+  cmms-attachments:

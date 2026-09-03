@@ -8,4 +8,5 @@ public static class DatabaseSchemas
     public const string MaintenanceRequests = "maintenance_requests";
     public const string WorkManagement = "work_management";
     public const string PreventiveMaintenance = "preventive_maintenance";
+    public const string Attachments = "attachments";
 }

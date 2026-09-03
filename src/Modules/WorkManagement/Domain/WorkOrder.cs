@@ -125,15 +125,44 @@ public sealed class WorkOrder
         WrenchStartAtUtc = DateTimeOffset.UtcNow;
     }
 
-    /// <summary>InProgress -> Completed. SCOPE CUT: docs/01's full guard ("all required checklist
-    /// items resolved; >=1 labor entry; no open labor/downtime interval; ... downtime cause code")
-    /// depends on checklist/labor/downtime child tables that are out of scope for this bounded
-    /// slice (see docs/01 §§ Checklist item types, Downtime tracking) — completion here only
-    /// enforces the state guard (must be InProgress), which is the part this slice's concurrency
-    /// tests actually exercise.</summary>
-    public void MarkCompleted(Guid completedByUserId)
+    /// <summary>InProgress -> Completed. Enforces docs/01's completion guard for the two child
+    /// tables this slice built (checklist, downtime) — the caller (see
+    /// src/Cmms.Api/WorkOrdersEndpoints.cs) computes both booleans from the current execution
+    /// cycle's child rows under the same root lock, so this method never queries the database
+    /// itself; it only enforces the invariant once the facts are known.
+    ///
+    /// SCOPE CUT, carried forward and narrowed from the prior version of this comment: docs/01 also
+    /// lists "≥1 labor entry" in the same guard. This slice has no per-entry labor ledger — only the
+    /// single <see cref="WrenchStartAtUtc"/> timestamp set by <see cref="StartWork"/> (asserted
+    /// non-null defensively below, since it should always be set by the time a Work Order reaches
+    /// InProgress) — so "labor recorded" degrades to "work was started", not "at least one itemized
+    /// labor entry exists". Building a labor ledger is deferred, same bounded-slice pattern as parts
+    /// (record-only ledger) and checklist (no template CRUD).</summary>
+    public void MarkCompleted(
+        Guid completedByUserId,
+        bool allRequiredChecklistItemsResolved,
+        bool hasOpenDowntimeInterval)
     {
         RequireStatus(WorkOrderStatus.InProgress, nameof(MarkCompleted));
+
+        if (WrenchStartAtUtc is null)
+        {
+            throw new InvalidWorkOrderTransitionException(
+                "Mark Completed requires work to have been started (no wrench-start timestamp recorded).");
+        }
+
+        if (!allRequiredChecklistItemsResolved)
+        {
+            throw new InvalidWorkOrderTransitionException(
+                "Mark Completed requires every required checklist item for this execution cycle to be resolved.");
+        }
+
+        if (hasOpenDowntimeInterval)
+        {
+            throw new InvalidWorkOrderTransitionException(
+                "Mark Completed requires every downtime interval for this execution cycle to be closed with a cause.");
+        }
+
         Status = WorkOrderStatus.Completed;
         CompletedAtUtc = DateTimeOffset.UtcNow;
         CompletedByUserId = completedByUserId;

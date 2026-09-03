@@ -54,5 +54,18 @@ internal static class HttpClientAuthExtensions
         return await client.SendAsync(request);
     }
 
+    public static async Task<HttpResponseMessage> PutBytesWithCsrfAsync(
+        this HttpClient client, string requestUri, byte[] body, string contentType)
+    {
+        var csrf = await client.GetCsrfTokenAsync();
+        using var request = new HttpRequestMessage(HttpMethod.Put, requestUri)
+        {
+            Content = new ByteArrayContent(body)
+        };
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        request.Headers.Add("X-CSRF-TOKEN", csrf);
+        return await client.SendAsync(request);
+    }
+
     private sealed record CsrfResponse(string Token);
 }

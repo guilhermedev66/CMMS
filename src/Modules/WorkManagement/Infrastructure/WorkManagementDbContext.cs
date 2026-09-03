@@ -8,6 +8,12 @@ public sealed class WorkManagementDbContext(DbContextOptions<WorkManagementDbCon
 {
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
 
+    public DbSet<ChecklistItem> ChecklistItems => Set<ChecklistItem>();
+
+    public DbSet<DowntimeInterval> DowntimeIntervals => Set<DowntimeInterval>();
+
+    public DbSet<PartUsage> PartUsages => Set<PartUsage>();
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         IncrementRowVersions();
@@ -66,6 +72,89 @@ public sealed class WorkManagementDbContext(DbContextOptions<WorkManagementDbCon
             entity.HasIndex(workOrder => workOrder.SourceRequestId)
                 .IsUnique()
                 .HasFilter("source_request_id IS NOT NULL");
+        });
+
+        builder.Entity<ChecklistItem>(entity =>
+        {
+            entity.ToTable(
+                "checklist_items",
+                table =>
+                {
+                    table.HasCheckConstraint(
+                        "ck_checklist_items_item_type",
+                        "item_type IN ('Boolean', 'Numeric', 'SingleSelect', 'PhotoRequired', 'Note')");
+                });
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Label).HasMaxLength(300).IsRequired();
+            entity.Property(item => item.ItemType).HasConversion<string>().HasMaxLength(20);
+            entity.Property(item => item.NumericUnit).HasMaxLength(30);
+            entity.Property(item => item.SingleSelectOptionsCsv).HasMaxLength(1000);
+            entity.Property(item => item.SelectedOption).HasMaxLength(200);
+            entity.Property(item => item.NoteText).HasMaxLength(2000);
+            entity.Property(item => item.NumericValue).HasColumnType("numeric(18,4)");
+            entity.Property(item => item.NumericMinValue).HasColumnType("numeric(18,4)");
+            entity.Property(item => item.NumericMaxValue).HasColumnType("numeric(18,4)");
+            entity.Property(item => item.CreatedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(item => item.ResolvedAtUtc).HasColumnType("timestamp with time zone");
+            entity.HasIndex(item => new { item.WorkOrderId, item.ExecutionCycle });
+            entity.HasOne<WorkOrder>()
+                .WithMany()
+                .HasForeignKey(item => item.WorkOrderId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<DowntimeInterval>(entity =>
+        {
+            entity.ToTable(
+                "downtime_intervals",
+                table =>
+                {
+                    table.HasCheckConstraint(
+                        "ck_downtime_intervals_classification",
+                        "classification IN ('FullStop', 'PartialDerating')");
+                    table.HasCheckConstraint(
+                        "ck_downtime_intervals_cause_category",
+                        "cause_category IS NULL OR cause_category IN ('Mechanical', 'Electrical', 'Hydraulic', 'Pneumatic', 'Instrumentation', 'Operational')");
+                    table.HasCheckConstraint(
+                        "ck_downtime_intervals_ended_after_started",
+                        "ended_at_utc IS NULL OR ended_at_utc >= started_at_utc");
+                });
+            entity.HasKey(interval => interval.Id);
+            entity.Property(interval => interval.Classification).HasConversion<string>().HasMaxLength(20);
+            entity.Property(interval => interval.CauseCategory).HasConversion<string>().HasMaxLength(20);
+            entity.Property(interval => interval.CauseMechanism).HasMaxLength(200);
+            entity.Property(interval => interval.StartedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(interval => interval.EndedAtUtc).HasColumnType("timestamp with time zone");
+            entity.HasIndex(interval => new { interval.WorkOrderId, interval.ExecutionCycle });
+            entity.HasIndex(interval => interval.AssetId);
+            entity.HasOne<WorkOrder>()
+                .WithMany()
+                .HasForeignKey(interval => interval.WorkOrderId)
+                .OnDelete(DeleteBehavior.Restrict);
+            // The FullStop no-overlap exclusion constraint is added via raw SQL in the migration
+            // (EF Core's fluent API has no first-class support for PostgreSQL EXCLUDE constraints).
+        });
+
+        builder.Entity<PartUsage>(entity =>
+        {
+            entity.ToTable("part_usages");
+            entity.HasKey(usage => usage.Id);
+            entity.Property(usage => usage.PartName).HasMaxLength(200).IsRequired();
+            entity.Property(usage => usage.PartCode).HasMaxLength(100);
+            entity.Property(usage => usage.Quantity).HasColumnType("numeric(18,4)");
+            entity.Property(usage => usage.UnitCost).HasColumnType("numeric(18,4)");
+            entity.Property(usage => usage.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(usage => usage.IdempotencyKey).HasMaxLength(100);
+            entity.Property(usage => usage.CreatedAtUtc).HasColumnType("timestamp with time zone");
+            entity.HasIndex(usage => new { usage.WorkOrderId, usage.ExecutionCycle });
+            // docs/01: "a client-supplied idempotency key deduplicates a retried insert".
+            entity.HasIndex(usage => new { usage.WorkOrderId, usage.IdempotencyKey })
+                .IsUnique()
+                .HasFilter("idempotency_key IS NOT NULL");
+            entity.HasOne<WorkOrder>()
+                .WithMany()
+                .HasForeignKey(usage => usage.WorkOrderId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 

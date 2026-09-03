@@ -184,16 +184,21 @@ export function AssetDetailPage() {
         )}
 
         {activeTab === 'QR Info' && (
-          <EmptyState
-            compact
-            headingLevel="h2"
-            icon={QrCode}
-            label="QR Info"
-            description="Technicians scan this asset's QR code to jump straight into an open Work Order."
-            milestone="QR-driven navigation wired up in M4 — Maintenance Execution."
-          >
+          <div className="flex flex-col items-center gap-3 py-10 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-md border border-border bg-surface-raised text-text-secondary">
+              <QrCode className="h-6 w-6" strokeWidth={1.5} />
+            </div>
+            <h2 className="text-base font-semibold text-text-primary">QR Info</h2>
+            <p className="max-w-sm text-sm text-text-secondary">
+              A physical tag encodes this locator as <span className="font-mono">/scan/{'{locator}'}</span> — scanning
+              it never grants more access than the technician's own role/site membership already allows
+              (docs/02-security-and-invariants.md § "QR strategy").
+            </p>
             <p className="font-mono text-xs text-text-secondary tabular-nums">Locator: {asset.qrLocator}</p>
-          </EmptyState>
+            <Link to={`/scan/${asset.qrLocator}`} className="text-sm text-accent hover:underline">
+              Simulate a scan →
+            </Link>
+          </div>
         )}
       </div>
     </div>

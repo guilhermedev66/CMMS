@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorkManagement", "src\Modul
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PreventiveMaintenance", "src\Modules\PreventiveMaintenance\PreventiveMaintenance.csproj", "{1B7E79BE-72FE-4C4C-B052-424704AA2412}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Attachments", "src\Modules\Attachments\Attachments.csproj", "{F97231F7-39C0-4E45-B041-58A433E786B6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -147,6 +149,18 @@ Global
 		{1B7E79BE-72FE-4C4C-B052-424704AA2412}.Release|x64.Build.0 = Release|Any CPU
 		{1B7E79BE-72FE-4C4C-B052-424704AA2412}.Release|x86.ActiveCfg = Release|Any CPU
 		{1B7E79BE-72FE-4C4C-B052-424704AA2412}.Release|x86.Build.0 = Release|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Debug|x64.Build.0 = Debug|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Debug|x86.Build.0 = Debug|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Release|x64.ActiveCfg = Release|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Release|x64.Build.0 = Release|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Release|x86.ActiveCfg = Release|Any CPU
+		{F97231F7-39C0-4E45-B041-58A433E786B6}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -162,5 +176,6 @@ Global
 		{D7949A20-604A-4138-B661-0AB2CBF36A60} = {CA253913-39DE-BFD0-C9A3-4B7EC6FBDF17}
 		{4128AD89-65FA-420D-8978-24D828925620} = {CA253913-39DE-BFD0-C9A3-4B7EC6FBDF17}
 		{1B7E79BE-72FE-4C4C-B052-424704AA2412} = {CA253913-39DE-BFD0-C9A3-4B7EC6FBDF17}
+		{F97231F7-39C0-4E45-B041-58A433E786B6} = {CA253913-39DE-BFD0-C9A3-4B7EC6FBDF17}
 	EndGlobalSection
 EndGlobal

@@ -58,6 +58,7 @@ internal static class WorkOrdersEndpoints
 
     private static async Task<IResult> ListWorkOrdersAsync(
         Guid? siteId,
+        Guid? assetId,
         ClaimsPrincipal user,
         WorkManagementDbContext workOrdersDb,
         IPermissionEvaluator permissions,
@@ -90,6 +91,15 @@ internal static class WorkOrdersEndpoints
             }
 
             query = query.Where(workOrder => workOrder.SiteId == siteId.Value);
+        }
+
+        // Purely a narrowing filter on top of the RBAC-scoped query above — it grants no
+        // additional visibility. This is what the QR asset deep-link (docs/02 § "QR strategy")
+        // uses: scanning a tag never bypasses workorders.read.* visibility, it just asks the same
+        // authorized query for the subset tied to one asset.
+        if (assetId is not null)
+        {
+            query = query.Where(workOrder => workOrder.AssetId == assetId.Value);
         }
 
         var list = await query.OrderByDescending(workOrder => workOrder.CreatedAtUtc).ToListAsync(cancellationToken);
@@ -326,27 +336,97 @@ internal static class WorkOrdersEndpoints
             mutate: workOrder => workOrder.StartWork(),
             cancellationToken: cancellationToken);
 
-    private static Task<IResult> CompleteAsync(
+    /// <summary>
+    /// Not built on the shared <see cref="TransitionAsync"/> helper (unlike every other transition
+    /// here) because Mark Completed's guard, per docs/01's transition table, needs to read this
+    /// execution cycle's checklist/downtime child rows before deciding whether the transition is
+    /// even legal — <see cref="TransitionAsync"/>'s mutator delegates only ever see the
+    /// <see cref="WorkOrder"/> row itself. Same root-lock-then-authorize-then-mutate-then-audit
+    /// shape, just with those two extra reads folded in under the same lock (docs/02: "Child edit
+    /// ... races with completion/closure ... Both commands lock the Work Order root").
+    /// </summary>
+    private static async Task<IResult> CompleteAsync(
         Guid id,
         HttpContext httpContext,
         IAntiforgery antiforgery,
         IConfiguration configuration,
         IPermissionEvaluator permissions,
         IAuditEventWriter auditWriter,
-        CancellationToken cancellationToken) =>
-        TransitionAsync(
-            id,
-            httpContext,
-            antiforgery,
-            configuration,
-            permissions,
-            auditWriter,
-            PermissionCatalog.WorkOrdersComplete,
-            actorCheck: RequireAssigneeOrPlannerAsync,
-            action: "workorder.completed",
-            reason: null,
-            mutateWithActor: (workOrder, actorUserId) => workOrder.MarkCompleted(actorUserId),
-            cancellationToken: cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        if (!await AntiforgeryHelpers.HasValidAntiforgeryTokenAsync(httpContext, antiforgery))
+        {
+            return Results.BadRequest(new { error = "Invalid anti-forgery token." });
+        }
+
+        var connectionString = configuration.GetConnectionString("Cmms")
+            ?? throw new InvalidOperationException("Connection string 'Cmms' is not configured.");
+
+        await using var transactionScope = await SharedTransactionScope.BeginAsync(connectionString, cancellationToken);
+        await using var workOrdersDb = transactionScope.CreateContext<WorkManagementDbContext>(options => new WorkManagementDbContext(options));
+        await using var auditDb = transactionScope.CreateContext<AuditDbContext>(options => new AuditDbContext(options));
+
+        var workOrder = await workOrdersDb.WorkOrders
+            .FromSqlInterpolated($"SELECT * FROM work_management.work_orders WHERE id = {id} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
+        if (workOrder is null)
+        {
+            return Results.NotFound();
+        }
+
+        var actorUserId = permissions.GetUserId(httpContext.User);
+        if (actorUserId is null || !await permissions.HasPermissionAsync(httpContext.User, PermissionCatalog.WorkOrdersComplete, workOrder.SiteId, cancellationToken))
+        {
+            return Results.NotFound();
+        }
+
+        var role = await permissions.GetEffectiveRoleAsync(httpContext.User, workOrder.SiteId, cancellationToken);
+        if (!RequireAssigneeOrPlannerAsync(workOrder, role, actorUserId.Value))
+        {
+            return Results.NotFound();
+        }
+
+        var allRequiredResolved = !await workOrdersDb.ChecklistItems.AsNoTracking().AnyAsync(
+            item => item.WorkOrderId == id && item.ExecutionCycle == workOrder.ExecutionCycle &&
+                item.IsRequired && !item.IsResolved,
+            cancellationToken);
+        var hasOpenDowntime = await workOrdersDb.DowntimeIntervals.AsNoTracking().AnyAsync(
+            interval => interval.WorkOrderId == id && interval.ExecutionCycle == workOrder.ExecutionCycle &&
+                interval.EndedAtUtc == null,
+            cancellationToken);
+
+        var beforeStatus = workOrder.Status;
+        try
+        {
+            workOrder.MarkCompleted(actorUserId.Value, allRequiredResolved, hasOpenDowntime);
+        }
+        catch (InvalidWorkOrderTransitionException ex)
+        {
+            await transactionScope.RollbackAsync(cancellationToken);
+            return Results.Conflict(new { error = ex.Message });
+        }
+
+        await workOrdersDb.SaveChangesAsync(cancellationToken);
+        await ClearPreventiveMaintenanceOccurrenceAsync(transactionScope, workOrder, cancellationToken);
+
+        await auditWriter.WriteAsync(
+            auditDb,
+            new AuditEventEntry(
+                ActorUserId: actorUserId,
+                Action: "workorder.completed",
+                ResourceType: "WorkOrder",
+                ResourceId: workOrder.Id,
+                SiteId: workOrder.SiteId,
+                CorrelationId: null,
+                Reason: null,
+                BeforeJson: JsonSerializer.Serialize(new { status = beforeStatus.ToString() }),
+                AfterJson: JsonSerializer.Serialize(new { status = workOrder.Status.ToString() })),
+            cancellationToken);
+
+        await transactionScope.CommitAsync(cancellationToken);
+
+        return Results.Ok(WorkOrderResponse.From(workOrder));
+    }
 
     private static Task<IResult> CloseAsync(
         Guid id,

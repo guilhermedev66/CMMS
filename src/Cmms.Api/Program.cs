@@ -2,6 +2,8 @@ using System.Text.Json.Serialization;
 using Cmms.Api;
 using Cmms.Modules.Assets;
 using Cmms.Modules.Assets.Infrastructure;
+using Cmms.Modules.Attachments;
+using Cmms.Modules.Attachments.Infrastructure;
 using Cmms.Modules.Audit;
 using Cmms.Modules.Audit.Infrastructure;
 using Cmms.Modules.IdentityAccess;
@@ -28,6 +30,7 @@ builder.Services.AddAudit(builder.Configuration);
 builder.Services.AddMaintenanceRequests(builder.Configuration);
 builder.Services.AddWorkManagement(builder.Configuration);
 builder.Services.AddPreventiveMaintenance(builder.Configuration);
+builder.Services.AddAttachments(builder.Configuration);
 builder.Services.AddScoped<IMaintenancePlanGenerationRunner, MaintenancePlanGenerationRunner>();
 if (builder.Configuration.GetValue("PreventiveMaintenance:SchedulerEnabled", true))
 {
@@ -68,6 +71,9 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrations"))
     await scope.ServiceProvider
         .GetRequiredService<PreventiveMaintenanceDbContext>()
         .Database.MigrateAsync();
+    await scope.ServiceProvider
+        .GetRequiredService<AttachmentsDbContext>()
+        .Database.MigrateAsync();
 }
 
 await IdentityAccessInitializer.BootstrapAdminAsync(app.Services, builder.Configuration);
@@ -80,6 +86,8 @@ app.MapAuthEndpoints();
 app.MapAssetsEndpoints();
 app.MapMaintenanceRequestsEndpoints();
 app.MapWorkOrdersEndpoints();
+app.MapWorkOrderExecutionEndpoints();
+app.MapAttachmentsEndpoints();
 app.MapMaintenancePlansEndpoints();
 
 app.MapGet("/health", async (
@@ -89,6 +97,7 @@ app.MapGet("/health", async (
     MaintenanceRequestsDbContext maintenanceRequests,
     WorkManagementDbContext workManagement,
     PreventiveMaintenanceDbContext preventiveMaintenance,
+    AttachmentsDbContext attachments,
     CancellationToken cancellationToken) =>
 {
     try
@@ -99,7 +108,8 @@ app.MapGet("/health", async (
             await audit.Database.CanConnectAsync(cancellationToken) &&
             await maintenanceRequests.Database.CanConnectAsync(cancellationToken) &&
             await workManagement.Database.CanConnectAsync(cancellationToken) &&
-            await preventiveMaintenance.Database.CanConnectAsync(cancellationToken);
+            await preventiveMaintenance.Database.CanConnectAsync(cancellationToken) &&
+            await attachments.Database.CanConnectAsync(cancellationToken);
 
         return databaseAvailable
             ? Results.Ok(new { status = "healthy" })

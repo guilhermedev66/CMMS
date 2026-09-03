@@ -10,6 +10,7 @@ COPY ["src/Modules/Audit/Audit.csproj", "src/Modules/Audit/"]
 COPY ["src/Modules/MaintenanceRequests/MaintenanceRequests.csproj", "src/Modules/MaintenanceRequests/"]
 COPY ["src/Modules/WorkManagement/WorkManagement.csproj", "src/Modules/WorkManagement/"]
 COPY ["src/Modules/PreventiveMaintenance/PreventiveMaintenance.csproj", "src/Modules/PreventiveMaintenance/"]
+COPY ["src/Modules/Attachments/Attachments.csproj", "src/Modules/Attachments/"]
 RUN dotnet restore "src/Cmms.Api/Cmms.Api.csproj"
 
 COPY . .
@@ -27,7 +28,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && apt-get clean \
     && mkdir -p /home/app/.aspnet/DataProtection-Keys \
-    && chown -R app:app /home/app/.aspnet
+    && chown -R app:app /home/app/.aspnet \
+    && mkdir -p /var/cmms-attachments \
+    && chown -R app:app /var/cmms-attachments
 USER app
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Cmms.Api.dll"]

@@ -1,5 +1,5 @@
 import { ArrowLeft, RotateCw, TriangleAlert } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getLocationPath, listAssets, listLocations } from '../api/assets'
 import { ApiError } from '../api/client'
@@ -8,9 +8,16 @@ import { PriorityBadge } from '../components/PriorityBadge'
 import { StatusTransitionMenu } from '../components/StatusTransitionMenu'
 import { WorkOrderStatusBadge } from '../components/WorkOrderStatusBadge'
 import { useAsync } from '../hooks/useAsync'
+import { useAuth } from '../auth/useAuth'
+import { WorkOrderExecutionPanel } from './WorkOrderExecutionPanel'
+
+const tabs = ['Overview', 'Execution'] as const
+type Tab = (typeof tabs)[number]
 
 export function WorkOrderDetailPage() {
   const { workOrderId } = useParams<{ workOrderId: string }>()
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState<Tab>('Overview')
 
   const { status, data, error, reload } = useAsync(
     () =>
@@ -61,6 +68,8 @@ export function WorkOrderDetailPage() {
   const { workOrder, assets, locations } = data
   const asset = workOrder.assetId ? assets.find((a) => a.id === workOrder.assetId) : undefined
   const target = asset ? `${asset.tag} — ${asset.name}` : getLocationPath(locations, workOrder.locationId)
+  const membership = user?.siteMemberships.find((m) => m.siteId === workOrder.siteId)
+  const effectiveRole = user?.isAdmin ? 'Admin' : membership?.role
 
   return (
     <div className="flex h-full flex-col">
@@ -82,32 +91,61 @@ export function WorkOrderDetailPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="mb-6 max-w-xs">
-          <p className="mb-1 text-xs text-text-secondary">Actions</p>
-          <StatusTransitionMenu workOrder={workOrder} onChanged={reload} />
+      <div className="overflow-x-auto border-b border-border px-6">
+        <div className="flex min-w-max gap-4" role="tablist" aria-label="Work Order detail sections">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              onClick={() => setActiveTab(tab)}
+              className={`border-b-2 px-1 py-3 text-sm whitespace-nowrap transition-colors ${
+                activeTab === tab
+                  ? 'border-accent font-medium text-accent'
+                  : 'border-transparent text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-          <Field label="Description" value={workOrder.description ?? '—'} />
-          <Field label="Execution cycle" value={<span className="font-mono tabular-nums">{workOrder.executionCycle}</span>} />
-          <Field label="Assignee" value={workOrder.assigneeId ? <span className="font-mono text-xs tabular-nums">{workOrder.assigneeId}</span> : 'Unassigned'} />
-          <Field
-            label="Created"
-            value={new Date(workOrder.createdAtUtc).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-          />
-          {workOrder.wrenchStartAtUtc && (
-            <Field label="Started" value={new Date(workOrder.wrenchStartAtUtc).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} />
-          )}
-          {workOrder.completedAtUtc && (
-            <Field label="Completed" value={new Date(workOrder.completedAtUtc).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} />
-          )}
-          {workOrder.closedAtUtc && (
-            <Field label="Closed" value={new Date(workOrder.closedAtUtc).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} />
-          )}
-          {workOrder.cancelReason && <Field label="Cancel reason" value={workOrder.cancelReason} />}
-          {workOrder.reopenReason && <Field label="Reopen reason" value={workOrder.reopenReason} />}
-        </dl>
+      <div className="flex-1 overflow-y-auto px-6">
+        {activeTab === 'Overview' && (
+          <div className="py-6">
+            <div className="mb-6 max-w-xs">
+              <p className="mb-1 text-xs text-text-secondary">Actions</p>
+              <StatusTransitionMenu workOrder={workOrder} onChanged={reload} />
+            </div>
+
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+              <Field label="Description" value={workOrder.description ?? '—'} />
+              <Field label="Execution cycle" value={<span className="font-mono tabular-nums">{workOrder.executionCycle}</span>} />
+              <Field label="Assignee" value={workOrder.assigneeId ? <span className="font-mono text-xs tabular-nums">{workOrder.assigneeId}</span> : 'Unassigned'} />
+              <Field
+                label="Created"
+                value={new Date(workOrder.createdAtUtc).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              />
+              {workOrder.wrenchStartAtUtc && (
+                <Field label="Started" value={new Date(workOrder.wrenchStartAtUtc).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} />
+              )}
+              {workOrder.completedAtUtc && (
+                <Field label="Completed" value={new Date(workOrder.completedAtUtc).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} />
+              )}
+              {workOrder.closedAtUtc && (
+                <Field label="Closed" value={new Date(workOrder.closedAtUtc).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} />
+              )}
+              {workOrder.cancelReason && <Field label="Cancel reason" value={workOrder.cancelReason} />}
+              {workOrder.reopenReason && <Field label="Reopen reason" value={workOrder.reopenReason} />}
+            </dl>
+          </div>
+        )}
+
+        {activeTab === 'Execution' && (
+          <WorkOrderExecutionPanel workOrder={workOrder} currentUserId={user?.id} effectiveRole={effectiveRole} />
+        )}
       </div>
     </div>
   )

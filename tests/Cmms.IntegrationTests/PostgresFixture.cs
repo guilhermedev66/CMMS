@@ -1,5 +1,6 @@
 using Cmms.BuildingBlocks.Database;
 using Cmms.Modules.Assets.Infrastructure;
+using Cmms.Modules.Attachments.Infrastructure;
 using Cmms.Modules.Audit.Infrastructure;
 using Cmms.Modules.IdentityAccess.Infrastructure;
 using Cmms.Modules.MaintenanceRequests.Infrastructure;
@@ -66,6 +67,12 @@ public sealed class PostgresFixture : IAsyncLifetime
             options => new PreventiveMaintenanceDbContext(options), DatabaseSchemas.PreventiveMaintenance))
         {
             await plansDb.Database.MigrateAsync();
+        }
+
+        await using (var attachmentsDb = CreateContext<AttachmentsDbContext>(
+            options => new AttachmentsDbContext(options), DatabaseSchemas.Attachments))
+        {
+            await attachmentsDb.Database.MigrateAsync();
         }
     }
 

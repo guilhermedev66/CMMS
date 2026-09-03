@@ -74,8 +74,11 @@ export function getAvailableActions(status: WorkOrderStatus): WorkOrderAction[] 
   return ACTIONS_BY_STATUS[status]
 }
 
-export function listWorkOrders(): Promise<WorkOrder[]> {
-  return apiClient.get<WorkOrder[]>('/work-orders')
+/** `assetId` is a pure narrowing filter on top of the same RBAC-scoped query (see
+ * WorkOrdersEndpoints.ListWorkOrdersAsync) — it's what the QR asset deep-link uses to show "Work
+ * Orders for this asset" without granting any visibility a plain GET /work-orders wouldn't. */
+export function listWorkOrders(assetId?: string): Promise<WorkOrder[]> {
+  return apiClient.get<WorkOrder[]>(assetId ? `/work-orders?assetId=${encodeURIComponent(assetId)}` : '/work-orders')
 }
 
 export function getWorkOrder(id: string): Promise<WorkOrder> {

@@ -136,3 +136,49 @@ export const apiClient = {
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
 }
+
+/**
+ * Raw-bytes PUT for attachment upload (src/Cmms.Api/AttachmentsEndpoints.cs's UploadBytesAsync) —
+ * the one call in this app whose body isn't JSON, so it can't go through `request()`/`doFetch()`
+ * above. Same cookie/CSRF contract as every other mutation, just a `Blob` body and an explicit
+ * `Content-Type` instead of `application/json`.
+ */
+export async function uploadAttachmentBytes(path: string, blob: Blob, contentType: string): Promise<void> {
+  const csrf = await getCsrfToken()
+  let res = await fetch(`${API_BASE}${path}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': contentType, 'X-CSRF-TOKEN': csrf },
+    body: blob,
+  })
+
+  if (res.status === 400) {
+    const probe = (await res
+      .clone()
+      .json()
+      .catch(() => null)) as { error?: string } | null
+    if (probe?.error === 'Invalid anti-forgery token.') {
+      res = await fetch(`${API_BASE}${path}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': contentType, 'X-CSRF-TOKEN': await getCsrfToken(true) },
+        body: blob,
+      })
+    }
+  }
+
+  if (res.status === 401) {
+    unauthorizedListeners.forEach((listener) => listener())
+    throw new ApiError(401, 'Your session has expired. Please log in again.')
+  }
+
+  if (!res.ok) {
+    const { message, fieldErrors } = await parseErrorMessage(res)
+    throw new ApiError(res.status, message, fieldErrors)
+  }
+}
+
+/** Same-origin, cookie-authed download URL for an evidence photo — usable directly as an `<img src>`. */
+export function attachmentDownloadUrl(attachmentId: string): string {
+  return `${API_BASE}/attachments/${attachmentId}/download`
+}

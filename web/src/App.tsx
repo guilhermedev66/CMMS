@@ -8,6 +8,7 @@ import { AssetDetailPage } from './routes/AssetDetailPage'
 import { AssetsListPage } from './routes/AssetsListPage'
 import { MaintenancePlansPage } from './routes/MaintenancePlansPage'
 import { RequestsListPage } from './routes/RequestsListPage'
+import { ScanPage } from './routes/ScanPage'
 import { WorkOrderDetailPage } from './routes/WorkOrderDetailPage'
 import { WorkOrdersListPage } from './routes/WorkOrdersListPage'
 
@@ -17,6 +18,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/scan/:qrLocator" element={<ScanPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>

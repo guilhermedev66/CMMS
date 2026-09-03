@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Cmms.BuildingBlocks\Cmms.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!--
+      SixLabors.ImageSharp: pure managed code — no native library to bundle into the Docker image,
+      unlike SkiaSharp/System.Drawing.Common (Linux-native/Windows-only respectively). Decode +
+      re-encode + metadata-stripping is all this module needs. On the Six Labors Split License
+      (3.x+) rather than the older Apache-2.0 2.1.x line deliberately: 2.1.9 carries two known
+      high/moderate-severity advisories (GHSA-2cmq-823j-5qj8, GHSA-rxmq-m78w-7wmc) with no Apache
+      2.0 fix release — shipping a vulnerable version of a security-relevant module's decode path
+      to save a license technicality isn't a trade this project makes. The Split License is free
+      for a project at this scale (no revenue); reconsider only if this code is ever sold
+      commercially at the license's threshold.
+    -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Cmms.Modules.Attachments</AssemblyName>
+    <RootNamespace>Cmms.Modules.Attachments</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

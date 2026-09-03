@@ -47,6 +47,16 @@ export function getAsset(id: string): Promise<Asset> {
   return apiClient.get<Asset>(`/assets/${id}`)
 }
 
+/**
+ * The QR deep-link lookup (src/Cmms.Api/AssetsEndpoints.cs's GetAssetByQrLocatorAsync) — resolves
+ * by the asset's separate, printed `qrLocator`, not its id. Byte-for-byte the same RBAC as
+ * getAsset(): a 404 here means "doesn't exist or you can't see it," never a distinguishable
+ * "exists but forbidden" — scanning a tag is not a capability (docs/02 § "QR strategy").
+ */
+export function getAssetByQrLocator(qrLocator: string): Promise<Asset> {
+  return apiClient.get<Asset>(`/assets/by-qr/${qrLocator}`)
+}
+
 export function listLocations(): Promise<Location[]> {
   return apiClient.get<Location[]>('/locations')
 }

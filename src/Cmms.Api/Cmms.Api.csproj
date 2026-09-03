@@ -8,6 +8,7 @@
     <ProjectReference Include="..\Modules\MaintenanceRequests\MaintenanceRequests.csproj" />
     <ProjectReference Include="..\Modules\WorkManagement\WorkManagement.csproj" />
     <ProjectReference Include="..\Modules\PreventiveMaintenance\PreventiveMaintenance.csproj" />
+    <ProjectReference Include="..\Modules\Attachments\Attachments.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

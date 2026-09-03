@@ -31,6 +31,7 @@ internal static class AssetsEndpoints
         var assets = endpoints.MapGroup("/assets").WithTags("Assets").RequireAuthorization();
         assets.MapGet("", ListAssetsAsync);
         assets.MapGet("/{id:guid}", GetAssetAsync);
+        assets.MapGet("/by-qr/{qrLocator:guid}", GetAssetByQrLocatorAsync);
         assets.MapPost("", CreateAssetAsync);
         assets.MapPut("/{id:guid}", EditAssetAsync);
         assets.MapPost("/{id:guid}/criticality", ChangeCriticalityAsync);
@@ -179,6 +180,40 @@ internal static class AssetsEndpoints
         {
             // Cross-site / no-permission: identical to not-found, so a resource id never confirms
             // existence to a caller who isn't authorized to see it (docs/02-security-and-invariants.md).
+            return Results.NotFound();
+        }
+
+        var role = await permissions.GetEffectiveRoleAsync(user, asset.SiteId, cancellationToken);
+        return Results.Ok(ProjectForRole(asset, role));
+    }
+
+    /// <summary>
+    /// The QR deep-link target, per docs/02-security-and-invariants.md § "QR strategy": a physical
+    /// tag encodes this <see cref="Asset.QrLocator"/> (a UUIDv7 distinct from <see cref="Asset.Id"/>
+    /// so the printed tag can be rotated without renumbering the resource itself), not the asset's
+    /// primary key. This endpoint is deliberately byte-for-byte the same authorization as <see
+    /// cref="GetAssetAsync"/> — <c>RequireAuthorization()</c> on the route group already turns an
+    /// unauthenticated scan into a plain 401 (the frontend's <c>/scan/:qrLocator</c> route is what
+    /// turns that into "redirect to login, return here after"), and cross-site/no-permission looks
+    /// identical to not-found, exactly like every other resource lookup in this codebase. There is
+    /// no separate "QR capability" — scanning a tag only ever asks this same RBAC-checked query for
+    /// one more field to look it up by.
+    /// </summary>
+    private static async Task<IResult> GetAssetByQrLocatorAsync(
+        Guid qrLocator,
+        ClaimsPrincipal user,
+        AssetsDbContext assetsDb,
+        IPermissionEvaluator permissions,
+        CancellationToken cancellationToken)
+    {
+        var asset = await assetsDb.Assets.AsNoTracking().FirstOrDefaultAsync(a => a.QrLocator == qrLocator, cancellationToken);
+        if (asset is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (!await permissions.HasPermissionAsync(user, PermissionCatalog.AssetsRead, asset.SiteId, cancellationToken))
+        {
             return Results.NotFound();
         }
 

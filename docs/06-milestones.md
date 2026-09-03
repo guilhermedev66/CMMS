@@ -3,7 +3,14 @@
 Status legend: `PENDING` not started · `IN PROGRESS` · `PASS` verified ·
 `BLOCKED` waiting on something.
 
-## M0 — Discovery & Architecture — IN PROGRESS
+## M0 — Discovery & Architecture — **M0 — APPROVED**
+
+Reviewed by Codex Backend (architecture critique: no blockers, two cleanup
+notes applied) and Codex QA (adversarial pass: 6 BLOCKER / 7 IMPORTANT / 4
+OPTIONAL findings, all resolved inline in `01-domain-and-workflows.md` and
+`02-security-and-invariants.md` — see `docs/qa/m0-adversarial-review.md`
+for the original findings and `03-architecture-decisions.md`'s intro note
+for how to trace each one to its resolution). Proceeding to M1.
 
 Deliverables (docs/ in this repo):
 - Product vision, personas, scope/out-of-scope (`00-product-vision.md`)

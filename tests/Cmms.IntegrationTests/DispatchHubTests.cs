@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using Cmms.Modules.IdentityAccess.Domain;
 using Cmms.Modules.IdentityAccess.Infrastructure;
 using Microsoft.AspNetCore.Http.Connections;
@@ -135,6 +136,15 @@ public sealed class DispatchHubTests : IAsyncLifetime
             locationId = (Guid?)null
         });
         Assert.Equal(System.Net.HttpStatusCode.Created, createResponse.StatusCode);
+        var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var workOrderId = created.GetProperty("id").GetGuid();
+
+        // Plain creation (Draft) deliberately does not broadcast (see WorkOrdersEndpoints.
+        // CreateWorkOrderAsync's doc comment — it would otherwise leak unpublished Planner activity
+        // to every Technician on the site-wide dispatch group). Publish is the first point a
+        // WorkOrderChanged event actually fires.
+        var publishResponse = await plannerHttp.PostJsonWithCsrfAsync($"/work-orders/{workOrderId}/publish", new { });
+        Assert.Equal(System.Net.HttpStatusCode.OK, publishResponse.StatusCode);
 
         var completedTask = await Task.WhenAny(siteAReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         Assert.True(completedTask == siteAReceived.Task, "Site A's own connection never received the WorkOrderChanged broadcast for its own site.");

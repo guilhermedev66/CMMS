@@ -142,7 +142,6 @@ internal static class WorkOrdersEndpoints
         WorkManagementDbContext workOrdersDb,
         AssetsDbContext assetsDb,
         IPermissionEvaluator permissions,
-        WorkOrderDispatchBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
         if (!await AntiforgeryHelpers.HasValidAntiforgeryTokenAsync(httpContext, antiforgery))
@@ -204,21 +203,16 @@ internal static class WorkOrdersEndpoints
         workOrdersDb.WorkOrders.Add(workOrder);
         await workOrdersDb.SaveChangesAsync(cancellationToken);
 
-        // Broadcast after the write actually committed — never call out to another service while
-        // holding a lock/transaction (docs/02's concurrency protocol); a plain single-context
-        // SaveChangesAsync above already committed by the time this runs.
-        await broadcaster.WorkOrderChangedAsync(
-            workOrder.SiteId,
-            new WorkOrderChangedPayload(workOrder.Id, workOrder.SiteId, workOrder.Status.ToString(), workOrder.Priority.ToString(), workOrder.AssetId, "created"),
-            cancellationToken);
-        if (workOrder.Priority == WorkOrderPriority.P1)
-        {
-            await broadcaster.HighPriorityAlertAsync(
-                workOrder.SiteId,
-                new HighPriorityAlertPayload(workOrder.Id, workOrder.SiteId, workOrder.Title, workOrder.Priority.ToString(), workOrder.AssetId),
-                cancellationToken);
-        }
-
+        // Deliberately NOT broadcast here. A newly created order is still Draft — Planner/Admin-only
+        // internal planning, not yet visible to a Technician through the ordinary REST API (nothing
+        // in workorders.read.assigned's scope shows an unassigned Draft order). The dispatch-board
+        // hub's group is site-wide (every active member of the site, any role — see
+        // WorkOrderDispatchHub's doc comment on that being an intentional "shared board" design,
+        // not per-assignment scoping), so broadcasting at Draft creation would leak the existence
+        // and asset-targeting of unpublished planning activity to every Technician at the site —
+        // strictly broader than what the REST API would ever show them. TransitionAsync's Publish
+        // broadcast (the point the order actually becomes visible/actionable) is the real "this
+        // exists now" signal, P1 alert included; this method deliberately doesn't duplicate it.
         return Results.Created($"/work-orders/{workOrder.Id}", WorkOrderResponse.From(workOrder));
     }
 

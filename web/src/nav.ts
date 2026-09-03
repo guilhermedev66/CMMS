@@ -53,8 +53,8 @@ export const navItems: NavItem[] = [
     path: '/planning',
     label: 'Planning',
     icon: CalendarDays,
-    description: 'Preventive maintenance calendar — month, week, and agenda views.',
-    milestone: 'Wired up in M3 — Preventive Maintenance.',
+    description: 'Preventive maintenance plans, sorted by next due date. Month/week calendar grid deferred.',
+    milestone: 'M3 — Preventive Maintenance.',
   },
   {
     path: '/reports',

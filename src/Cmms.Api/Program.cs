@@ -8,6 +8,8 @@ using Cmms.Modules.IdentityAccess;
 using Cmms.Modules.IdentityAccess.Infrastructure;
 using Cmms.Modules.MaintenanceRequests;
 using Cmms.Modules.MaintenanceRequests.Infrastructure;
+using Cmms.Modules.PreventiveMaintenance;
+using Cmms.Modules.PreventiveMaintenance.Infrastructure;
 using Cmms.Modules.WorkManagement;
 using Cmms.Modules.WorkManagement.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +27,12 @@ builder.Services.AddAssets(builder.Configuration);
 builder.Services.AddAudit(builder.Configuration);
 builder.Services.AddMaintenanceRequests(builder.Configuration);
 builder.Services.AddWorkManagement(builder.Configuration);
+builder.Services.AddPreventiveMaintenance(builder.Configuration);
+builder.Services.AddScoped<IMaintenancePlanGenerationRunner, MaintenancePlanGenerationRunner>();
+if (builder.Configuration.GetValue("PreventiveMaintenance:SchedulerEnabled", true))
+{
+    builder.Services.AddHostedService<MaintenancePlanGenerationService>();
+}
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddAntiforgery(options =>
@@ -57,6 +65,9 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrations"))
     await scope.ServiceProvider
         .GetRequiredService<WorkManagementDbContext>()
         .Database.MigrateAsync();
+    await scope.ServiceProvider
+        .GetRequiredService<PreventiveMaintenanceDbContext>()
+        .Database.MigrateAsync();
 }
 
 await IdentityAccessInitializer.BootstrapAdminAsync(app.Services, builder.Configuration);
@@ -69,6 +80,7 @@ app.MapAuthEndpoints();
 app.MapAssetsEndpoints();
 app.MapMaintenanceRequestsEndpoints();
 app.MapWorkOrdersEndpoints();
+app.MapMaintenancePlansEndpoints();
 
 app.MapGet("/health", async (
     IdentityAccessDbContext identityAccess,
@@ -76,6 +88,7 @@ app.MapGet("/health", async (
     AuditDbContext audit,
     MaintenanceRequestsDbContext maintenanceRequests,
     WorkManagementDbContext workManagement,
+    PreventiveMaintenanceDbContext preventiveMaintenance,
     CancellationToken cancellationToken) =>
 {
     try
@@ -85,7 +98,8 @@ app.MapGet("/health", async (
             await assets.Database.CanConnectAsync(cancellationToken) &&
             await audit.Database.CanConnectAsync(cancellationToken) &&
             await maintenanceRequests.Database.CanConnectAsync(cancellationToken) &&
-            await workManagement.Database.CanConnectAsync(cancellationToken);
+            await workManagement.Database.CanConnectAsync(cancellationToken) &&
+            await preventiveMaintenance.Database.CanConnectAsync(cancellationToken);
 
         return databaseAvailable
             ? Results.Ok(new { status = "healthy" })

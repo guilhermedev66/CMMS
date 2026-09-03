@@ -31,6 +31,11 @@ public sealed class CmmsWebApplicationFactory : WebApplicationFactory<Program>
         // No bootstrap admin here — each test seeds exactly the users/memberships it needs.
         Environment.SetEnvironmentVariable("BootstrapAdmin__Email", "");
         Environment.SetEnvironmentVariable("BootstrapAdmin__Password", "");
+        // The real timer-driven sweep would run concurrently with, and independently of, whatever
+        // a test is asserting — tests that need a sweep resolve IMaintenancePlanGenerationRunner
+        // directly instead (see MaintenancePlanGenerationTests), which is also the more precise
+        // simulation of "two ticks"/"two instances" than waiting on a real timer would be.
+        Environment.SetEnvironmentVariable("PreventiveMaintenance__SchedulerEnabled", "false");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

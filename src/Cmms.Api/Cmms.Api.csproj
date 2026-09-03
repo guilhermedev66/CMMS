@@ -7,6 +7,7 @@
     <ProjectReference Include="..\Modules\Audit\Audit.csproj" />
     <ProjectReference Include="..\Modules\MaintenanceRequests\MaintenanceRequests.csproj" />
     <ProjectReference Include="..\Modules\WorkManagement\WorkManagement.csproj" />
+    <ProjectReference Include="..\Modules\PreventiveMaintenance\PreventiveMaintenance.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

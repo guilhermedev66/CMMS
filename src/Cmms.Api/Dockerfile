@@ -9,6 +9,7 @@ COPY ["src/Modules/Assets/Assets.csproj", "src/Modules/Assets/"]
 COPY ["src/Modules/Audit/Audit.csproj", "src/Modules/Audit/"]
 COPY ["src/Modules/MaintenanceRequests/MaintenanceRequests.csproj", "src/Modules/MaintenanceRequests/"]
 COPY ["src/Modules/WorkManagement/WorkManagement.csproj", "src/Modules/WorkManagement/"]
+COPY ["src/Modules/PreventiveMaintenance/PreventiveMaintenance.csproj", "src/Modules/PreventiveMaintenance/"]
 RUN dotnet restore "src/Cmms.Api/Cmms.Api.csproj"
 
 COPY . .

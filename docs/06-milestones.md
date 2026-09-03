@@ -172,15 +172,78 @@ via API; concurrent claim of the same WO resolves to exactly one winner
 (proven by a real concurrent test, not asserted); Codex QA adversarial pass
 (IDOR, authz bypass, invalid transitions) with no BLOCKER.
 
-## M3 — Preventive Maintenance
+## M3 — Preventive Maintenance — **PASS**
 
 Maintenance plans, recurrence rules, background scheduler, automatic
 Preventive Work Order generation, idempotency against duplicate generation
 (single job firing twice, two scheduler instances), maintenance calendar UI.
 
-DoD: a concurrency/idempotency test proves a plan cannot generate two work
-orders for the same due occurrence even under simulated duplicate
-trigger/multiple-instance conditions; Codex QA pass with no BLOCKER.
+DoD check: a concurrency/idempotency test proves a plan cannot generate two
+work orders for the same due occurrence even under simulated duplicate
+trigger/multiple-instance conditions — PASS, proven by
+`MaintenancePlanGenerationTests.Two_concurrent_sweeps_on_the_same_due_plan_generate_exactly_one_occurrence_and_work_order`:
+two calls to `IMaintenancePlanGenerationRunner.RunSweepAsync()` launched via
+`Task.WhenAll` from two separate DI scopes (simulating two scheduler
+instances/overlapping ticks) against the real running host + real
+PostgreSQL, asserting exactly one `MaintenancePlanOccurrence` row and the
+plan's `ActiveOccurrenceId` pointing at it; a third sweep afterward still
+generates nothing (SuppressIfOpen). Also covered: a Paused plan is never
+swept even though due, and Floating recurrence correctly recomputes
+`NextDueAtUtc` from the Work Order's actual completion timestamp (not
+generation time) while clearing the active pointer. Independent Codex QA
+pass — unavailable this session (fallback protocol, same as M1/M2); tracked
+below as pending, same as M2's.
+
+Design, per docs/01's "Resolves QA finding B-04(2)" and docs/02's
+concurrency table row "Two scheduler ticks/instances": generation is
+two-phase — a short `SELECT ... FOR UPDATE SKIP LOCKED` batch-claim (work
+distribution only, releases its lock immediately) picks candidate due plan
+ids, then a per-plan transaction re-locks that one row with a blocking
+`SELECT ... FOR UPDATE`, re-validates `Active` + no already-open occurrence
+under the lock, and only then inserts the occurrence + creates the Work
+Order + advances the plan, all atomically. The occurrence's unique
+`(plan_id, scheduled_for)` index is the documented final safety net "even
+if the lock protocol is ever bypassed." A Work Order reaching Completed/
+Closed/Cancelled clears the plan's active pointer in the *same transaction*
+as that Work Order's own state change (wired into
+`WorkOrdersEndpoints.TransitionAsync`, not a separate best-effort step);
+Floating plans additionally recompute `NextDueAtUtc` from the real
+completion time at that point, not at generation time.
+
+Scope cuts, documented inline (`MaintenancePlan`'s doc comments): calendar
+recurrence is day-interval-based (`IntervalDays` + `NextDueAtUtc`), not a
+full RRULE/cron grammar — Fixed advances immediately at generation, Floating
+only advances at actual completion, matching docs/01's two definitions
+without building a general recurrence engine. No meter-based/condition-based
+triggers (docs/01 already scopes those out of v1). Frontend ships an
+agenda-style list (sorted by next due date, pause/resume, create form) —
+the month/week calendar grid docs/04 describes is deferred, same
+Grid-not-Kanban precedent as M2; not required by this milestone's DoD.
+
+Progress:
+- Backend: `PreventiveMaintenance` module (domain: `MaintenancePlan`,
+  `MaintenancePlanOccurrence`, `RecurrenceType`; EF Core + migrations,
+  site-immutability trigger, cross-schema FK to `identity_access.sites`).
+  `MaintenancePlansEndpoints` (create/list/get/pause/resume, `plans.*`
+  RBAC). The generation orchestration itself
+  (`MaintenancePlanGenerationRunner`/`MaintenancePlanGenerationService`,
+  a `BackgroundService` ticking every `PreventiveMaintenance:
+  SweepIntervalSeconds` — default 60s, `PreventiveMaintenance:
+  SchedulerEnabled` to disable) lives in `Cmms.Api`, not inside the
+  `PreventiveMaintenance` module project, to preserve this codebase's
+  established "a module never references another module's project"
+  boundary — the same reason `MaintenanceRequestsEndpoints.ConvertRequestAsync`
+  lives in `Cmms.Api` rather than inside the `MaintenanceRequests` module.
+- Verified: `dotnet build`/`dotnet test` on `Cmms.sln` green in Release
+  config (17/17 integration tests, real PostgreSQL via Testcontainers);
+  frontend `lint`/`build`/`test` (16/16) green; `docker compose up` boots
+  API + DB and applies migrations cleanly from a reset volume.
+- **Not** verified: same browser-screenshot gap as M1/M2 (no headless
+  Chromium available, no user-provisioning endpoint for a non-Admin login);
+  see M2's note for the full rationale — unchanged here.
+
+Pending: independent Codex QA re-review (carried over from M2, same
+fallback reason); calendar month/week grid.
 
 ## M4 — Maintenance Execution
 

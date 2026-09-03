@@ -1,0 +1,14 @@
+bin/
+obj/
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.user
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+.claude/

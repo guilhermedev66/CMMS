@@ -1,0 +1,49 @@
+/*
+ * Design tokens — source of truth is docs/04-frontend-ia.md ("Color tokens"
+ * and "Light / Dark / System" sections). Neutral scale follows Tailwind's
+ * Slate (light) / Zinc (dark) values; semantic status tokens are the
+ * desaturated set from that doc so they stay legible next to status badges
+ * rather than competing with them.
+ *
+ * Components must reference these semantic vars (var(--surface), etc.) —
+ * never raw hex values — so theme switching stays a single attribute flip.
+ */
+
+:root {
+  --accent: var(--status-info);
+  --accent-contrast: #ffffff;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --surface: #f8fafc;
+  --surface-raised: #ffffff;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+
+  --status-danger: #dc2626;
+  --status-warning: #d97706;
+  --status-success: #16a34a;
+  --status-info: #2563eb;
+  --status-neutral: #4b5563;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --surface: #09090b;
+  --surface-raised: #18181b;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --text-primary: #f8fafc;
+  --text-secondary: #a1a1aa;
+
+  --status-danger: #ef4444;
+  --status-warning: #f59e0b;
+  --status-success: #22c55e;
+  --status-info: #3b82f6;
+  --status-neutral: #71717a;
+}

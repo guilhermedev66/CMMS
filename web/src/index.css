@@ -1,0 +1,55 @@
+@import 'tailwindcss';
+@import './theme/tokens.css';
+
+@theme {
+  /* Semantic colors: mapped from theme/tokens.css so `bg-surface`,
+     `text-text-secondary`, `border-border`, `bg-status-danger`, etc. flip
+     automatically with the data-theme attribute — no dark: variants needed. */
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-status-danger: var(--status-danger);
+  --color-status-warning: var(--status-warning);
+  --color-status-success: var(--status-success);
+  --color-status-info: var(--status-info);
+  --color-status-neutral: var(--status-neutral);
+
+  /* Restrained radius scale per docs/04 — overrides Tailwind's defaults so
+     every rounded-sm / rounded-md in the app stays within 4-6px. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* Used for all data: asset tags, WO numbers, serials, meter readings,
+     costs, timestamps — tabular-nums keeps columns from jittering. */
+  --font-mono:
+    ui-monospace, 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas,
+    'Liberation Mono', monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+}

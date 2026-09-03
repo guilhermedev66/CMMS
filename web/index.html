@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Blocking, runs before any stylesheet paints. Reads the persisted theme
+      preference (or system preference) and sets data-theme synchronously so
+      there is never a flash of the wrong theme. See docs/04-frontend-ia.md
+      ("Light / Dark / System (no flash)") and src/theme/ThemeContext.tsx,
+      which take over live updates after hydration using the same storage key.
+    -->
+    <script>
+      (function () {
+        try {
+          var KEY = 'cmms-theme';
+          var pref = localStorage.getItem(KEY) || 'system';
+          var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var resolved = pref === 'system' ? (systemDark ? 'dark' : 'light') : pref;
+          document.documentElement.setAttribute('data-theme', resolved);
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CMMS</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

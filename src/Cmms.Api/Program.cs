@@ -24,6 +24,23 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Render "Secret Files" (as opposed to plain env vars) are mounted read-only under /etc/secrets,
+// one file per secret, filename == the config key with "__" as the section separator — the same
+// convention .NET env-var binding uses. This is the deploy-time secret channel for this service
+// (see render.yaml / README's Deployment section): each file's content becomes the value at that
+// config path, added last so it overrides both appsettings.json and any plain env vars.
+const string secretsDirectory = "/etc/secrets";
+if (Directory.Exists(secretsDirectory))
+{
+    var secretOverrides = Directory.GetFiles(secretsDirectory)
+        .Select(path => new KeyValuePair<string, string?>(
+            Path.GetFileName(path).Replace("__", ":"),
+            File.ReadAllText(path).Trim()))
+        .ToArray();
+    builder.Configuration.AddInMemoryCollection(secretOverrides);
+}
+
 var secureCookiePolicy = builder.Configuration.GetValue("Authentication:RequireSecureCookies", true)
     ? CookieSecurePolicy.Always
     : CookieSecurePolicy.SameAsRequest;

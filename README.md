@@ -194,12 +194,24 @@ browser only ever talks to one origin — the same same-origin-cookie architectu
 ## Deployment
 
 Target infrastructure (`docs/03-architecture-decisions.md`, ADR-18): **Vercel** (frontend, static
-build) + **Render** (backend, Docker) + **Neon** (PostgreSQL, serverless). `render.yaml` and
-`vercel.json` in the repo root are ready-to-use blueprints — Vercel's rewrites proxy `/api/*` and
-`/hubs/*` to the Render backend so the browser stays same-origin in production exactly as it does in
-dev, which is what lets session cookies work without CORS. Actually provisioning these accounts and
-setting secrets needs the project owner's own credentials/card-free signups and is not something an
-automated agent can complete unattended.
+build) + **Render** (backend, Docker) + **Neon** (PostgreSQL, serverless). `render.yaml` (repo root)
+and `web/vercel.json` are the live configs — the Vercel rewrite proxies `/api/*` to the Render
+backend (SignalR's `/hubs/work-orders` included, since the frontend always dials it through
+`/api/hubs/work-orders`) so the browser stays same-origin in production exactly as it does in dev,
+which is what lets session cookies work without CORS.
+
+Current state:
+
+- **Frontend** — live on Vercel: https://cmms-web-mocha.vercel.app
+- **Database** — provisioned on Neon (`cmms-production`, `aws-us-east-2`, Postgres 18)
+- **Backend** — service created on Render (`cmms-api`, Docker runtime,
+  https://cmms-api-ev0z.onrender.com) but not yet serving traffic: its `/health` endpoint checks
+  real DB connectivity (`Program.cs`), so it correctly refuses to go live until
+  `ConnectionStrings__Cmms` and the bootstrap-admin env vars are set on the service — the one step
+  requiring a human in Render's dashboard (Claude Code's own credential-handling guardrails won't let
+  an agent transmit a freshly-provisioned DB connection string or generated password through a CLI
+  command, by design). `.github/workflows/smoke.yml` (`workflow_dispatch`) verifies API health, the
+  frontend, and the `/api` rewrite end-to-end from GitHub's network once that's done.
 
 **Known limitation, disclosed rather than hidden**: `LocalDiskAttachmentStorage` (the dev/CI
 substitute for a presigned Cloudflare R2 upload — see `AttachmentUploadIntent`'s doc comment for the

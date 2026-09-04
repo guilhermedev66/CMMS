@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://cmms-api-ev0z.onrender.com/:path*"
+      "destination": "https://cmms-api-live.onrender.com/:path*"
     },
     {
       "source": "/(.*)",

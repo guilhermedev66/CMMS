@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FRONTEND_URL: https://cmms-web-mocha.vercel.app
-      API_URL: https://cmms-api-ev0z.onrender.com
+      API_URL: https://cmms-api-live.onrender.com
     steps:
       - name: API health check
         run: |

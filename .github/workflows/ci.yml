@@ -64,7 +64,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Proves src/Cmms.Api/Dockerfile actually builds a deployable image on a clean checkout —
+      # Proves Dockerfile actually builds a deployable image on a clean checkout —
       # M4/M5 both shipped without this (the .NET/frontend jobs above never exercised the Dockerfile
       # at all), so a broken image could have reached `main` unnoticed. Not pushed anywhere; this is
       # purely a build-succeeds gate, same spirit as the other two jobs.
@@ -72,7 +72,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: src/Cmms.Api/Dockerfile
+          file: Dockerfile
           push: false
           tags: cmms-api:ci
           cache-from: type=gha

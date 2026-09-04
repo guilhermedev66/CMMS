@@ -17,6 +17,7 @@ using Cmms.Modules.PreventiveMaintenance;
 using Cmms.Modules.PreventiveMaintenance.Infrastructure;
 using Cmms.Modules.WorkManagement;
 using Cmms.Modules.WorkManagement.Infrastructure;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Metrics;
@@ -199,6 +200,19 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+// Render (and every PaaS reverse proxy) terminates TLS at its edge and forwards to the container
+// over plain HTTP — without this, HttpContext.Request.IsHttps is false on every request, which
+// throws when AntiforgeryOptions.Cookie.SecurePolicy = Always (RequireSecureCookies=true, the
+// production setting). KnownNetworks/KnownProxies are cleared because Render's edge is the only
+// hop this container ever sees — there's no untrusted network path to validate a proxy IP against.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+};
+forwardedHeadersOptions.KnownIPNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 if (builder.Configuration.GetValue<bool>("Database:ApplyMigrations"))
 {

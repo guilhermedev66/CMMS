@@ -1,0 +1,37 @@
+name: Production Smoke Test
+
+# Runs from GitHub's network rather than a developer machine, so it isn't
+# subject to any local/sandbox egress restrictions to onrender.com or
+# vercel.app. Manual trigger by design — deploys happen independently on
+# Render (auto-deploy from `main`) and Vercel (CLI/git-triggered), so this
+# just verifies the two are actually up and wired together, on demand.
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Smoke test (frontend + API + rewrite)
+    runs-on: ubuntu-latest
+    env:
+      FRONTEND_URL: https://cmms-web-mocha.vercel.app
+      API_URL: https://cmms-api-ev0z.onrender.com
+    steps:
+      - name: API health check
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$API_URL/health")
+          echo "API /health -> $code"
+          test "$code" = "200"
+
+      - name: Frontend root serves the SPA
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$FRONTEND_URL/")
+          echo "Frontend / -> $code"
+          test "$code" = "200"
+
+      - name: Frontend /api rewrite reaches the backend
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$FRONTEND_URL/api/auth/csrf")
+          echo "Frontend /api/auth/csrf -> $code"
+          # 200 (csrf token issued) is the only success shape here — anything
+          # else means the rewrite isn't reaching a live backend.
+          test "$code" = "200"

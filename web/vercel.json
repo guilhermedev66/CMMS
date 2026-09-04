@@ -6,11 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE-WITH-RENDER-API-URL.onrender.com/:path*"
-    },
-    {
-      "source": "/hubs/:path*",
-      "destination": "https://REPLACE-WITH-RENDER-API-URL.onrender.com/hubs/:path*"
+      "destination": "https://cmms-api-ev0z.onrender.com/:path*"
     },
     {
       "source": "/(.*)",
